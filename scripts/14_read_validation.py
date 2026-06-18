@@ -116,7 +116,7 @@ def reproduce_split(read, hap):
     qsplit = best_split(read)
     seq = read.query_sequence
     if qsplit is None or seq is None or qsplit < 1000 or len(seq) - qsplit < 1000:
-        return None
+        return None, None
     ref, rep = REF[hap]
     with tempfile.TemporaryDirectory() as td:
         fa = f"{td}/f.fa"; bamf = f"{td}/f.bam"
@@ -133,7 +133,7 @@ def reproduce_split(read, hap):
                           "r_s": r.reference_start, "r_e": r.reference_end,
                           "strand": "-" if r.is_reverse else "+", "supp": False, "chrom": r.reference_name})
         b.close()
-    return frags if len(frags) == 2 else None
+    return (frags, qsplit) if len(frags) == 2 else (None, None)
 
 
 def cigar_junction(read, pos, svtype, svlen):
@@ -157,6 +157,46 @@ def cigar_junction(read, pos, svtype, svlen):
     return best[1] if best else None
 
 
+def sub_profile(read, readlen, win=151):
+    """Per-base smoothed substitution (mismatch) rate of the ORIGINAL linear alignment,
+    in read/query coords. Shows where the aligner extended through mismatches."""
+    m = np.zeros(readlen); cov = np.zeros(readlen)
+    for q, r, base in read.get_aligned_pairs(with_seq=True):
+        if q is None or q >= readlen:
+            continue
+        if r is not None:
+            cov[q] = 1
+            if base is not None and base.islower():
+                m[q] = 1
+    k = np.ones(win)
+    msum = np.convolve(m, k, "same"); csum = np.convolve(cov, k, "same")
+    return np.where(csum > 0, msum / np.maximum(csum, 1.0), np.nan)
+
+
+def ref_box(ax, f, bx0, bx1, yb, yt, fa, chrom, color, sv_interval=None):
+    """Local reference window for one fragment: grey bar, mapped segment highlighted,
+    CEN178 monomers, coord label. Returns the box x-range for the connector."""
+    flank = 1500
+    ws, we = f["r_s"] - flank, f["r_e"] + flank
+    span = max(we - ws, 1)
+    rxl = lambda r: bx0 + (r - ws) / span * (bx1 - bx0)
+    ax.add_patch(mp.Rectangle((bx0, yb), bx1 - bx0, yt - yb, fc="#ECECEC", ec="#999", lw=0.6))
+    for rp in trash(fa.fetch(chrom, max(0, ws), we)):
+        gx0, gx1 = rxl(ws + rp["start"]), rxl(ws + rp["end"])
+        ax.add_patch(mp.Rectangle((gx0, yt - 0.03), gx1 - gx0, 0.03, fc=mono_color(rp["width"]), ec="white", lw=0.2))
+    # mapped segment
+    ax.add_patch(mp.Rectangle((rxl(f["r_s"]), yb + 0.01), rxl(f["r_e"]) - rxl(f["r_s"]), yt - yb - 0.05,
+                              fc=color, alpha=0.85, ec="none"))
+    xa0, xa1 = (rxl(f["r_s"]), rxl(f["r_e"])) if f["strand"] == "+" else (rxl(f["r_e"]), rxl(f["r_s"]))
+    ax.annotate("", xy=(xa1, (yb + yt) / 2), xytext=(xa0, (yb + yt) / 2),
+                arrowprops=dict(arrowstyle="-|>", color="white", lw=1.3))
+    if sv_interval:  # deleted ref interval (DEL)
+        a, b = sv_interval
+        ax.add_patch(mp.Rectangle((rxl(a), yb), rxl(b) - rxl(a), yt - yb, fc="none", ec="#C0392B", lw=1.6, hatch="///"))
+    ax.text((bx0 + bx1) / 2, yt + 0.03, f"{chrom}:{f['r_s']/1e6:.3f}–{f['r_e']/1e6:.3f} Mb ({f['strand']})",
+            ha="center", fontsize=7.5, color="#333")
+
+
 def draw(ev, bam, fa, outdir=OUTDIR, prefix=""):
     chrom, pos, svt = ev["chrom"], int(ev["pos"]), ev["svtype"]
     svlen = int(ev["svlen"]); read_id = ev["read"]
@@ -165,98 +205,96 @@ def draw(ev, bam, fa, outdir=OUTDIR, prefix=""):
         print(f"  skip {read_id}: no alignment"); return
     seq = prim.query_sequence; readlen = len(seq)
     # split-and-map events map linearly in the original BAM — reproduce the split & remap
-    reproduced = False
-    if "SPLITANDMAP" in ev.get("methods", "") and len([f for f in frags if not f["supp"]]) == len(frags) and len(frags) == 1:
-        rf = reproduce_split(prim, ev["hap"])
+    reproduced = False; qsplit = None
+    if "SPLITANDMAP" in ev.get("methods", "") and len(frags) == 1:
+        rf, qs = reproduce_split(prim, ev["hap"])
         if rf and all(f["chrom"] == chrom for f in rf):
-            frags = rf; reproduced = True
+            frags = rf; reproduced = True; qsplit = qs
     jq = cigar_junction(prim, pos, svt, svlen)
-    rmin = min(f["r_s"] for f in frags); rmax = max(f["r_e"] for f in frags)
-    if svt == "DEL" and not reproduced:
-        rmin = min(rmin, pos - abs(svlen)); rmax = max(rmax, pos)
-    win_s, win_e = rmin - FLANK, rmax + FLANK
-    wide = (win_e - win_s) > 60000   # far-apart fragments: skip per-monomer ref track
-
-    # TRASH
-    read_reps = trash(seq)
-    ref_reps = [] if wide else trash(fa.fetch(chrom, max(0, win_s), win_e))
-
-    qx = lambda q: q / readlen
-    rx = lambda r: (r - win_s) / (win_e - win_s)
-
-    fig = plt.figure(figsize=(13, 6))
-    gs = gridspec.GridSpec(3, 1, height_ratios=[3.2, 1.0, 1.0], hspace=0.35)
-    ax = fig.add_subplot(gs[0]); ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-    REF_T, REF_B = 0.82, 0.70
-    RD_T, RD_B = 0.42, 0.30
-
-    # reference band
-    ax.add_patch(mp.Rectangle((0, REF_B), 1, REF_T - REF_B, fc="#E8E8E8", ec="#888", lw=0.6))
-    ax.text(-0.01, (REF_T + REF_B) / 2, f"{chrom}\nref", ha="right", va="center", fontsize=8)
-    # CEN178 on reference (register track sitting just above the ref band)
-    for rp in ref_reps:
-        gx0 = rx(win_s + rp["start"]); gx1 = rx(win_s + rp["end"])
-        ax.add_patch(mp.Rectangle((gx0, REF_T + 0.02), gx1 - gx0, 0.06, fc=mono_color(rp["width"]),
-                                  ec="white", lw=0.3))
-    # SV interval on reference
-    if svt == "DEL":
-        dx0, dx1 = rx(pos - abs(svlen)), rx(pos)
-        ax.add_patch(mp.Rectangle((dx0, REF_B), dx1 - dx0, REF_T - REF_B, fc="#C0392B", alpha=0.8, ec="#8B0000"))
+    fsort = sorted(frags, key=lambda f: f["q_s"])
+    # the junction in read coords
+    if reproduced and qsplit is not None:
+        junction_q = qsplit
+    elif jq is not None:
+        junction_q = jq
+    elif len(fsort) >= 2:
+        junction_q = fsort[0]["q_e"]
     else:
-        ax.plot([rx(pos)] * 2, [REF_B, REF_T], color="#2980B9", lw=2.5)
+        junction_q = readlen // 2
 
-    # read band
-    ax.add_patch(mp.Rectangle((0, RD_B), 1, RD_T - RD_B, fc="#F5F5F5", ec="#888", lw=0.5))
-    ax.text(-0.01, (RD_T + RD_B) / 2, "read\n(query)", ha="right", va="center", fontsize=8)
-    for i, f in enumerate(sorted(frags, key=lambda f: f["q_s"])):
+    rate = sub_profile(prim, readlen)
+    read_reps = trash(seq)
+    qx = lambda q: q / readlen
+
+    fig = plt.figure(figsize=(13, 7.8))
+    gs = gridspec.GridSpec(3, 1, height_ratios=[1.0, 2.5, 1.25], hspace=0.55)
+
+    # ── Row A: original-mapping substitution profile ───────────────────────────
+    axA = fig.add_subplot(gs[0]); axA.set_xlim(0, readlen)
+    axA.fill_between(np.arange(readlen), rate * 100, color="#C0392B", alpha=0.55, lw=0)
+    axA.axvline(junction_q, color="#222", ls="--", lw=1.3)
+    lhs = np.nanmean(rate[:junction_q]) * 100 if junction_q > 0 else 0
+    rhs = np.nanmean(rate[junction_q:]) * 100 if junction_q < readlen else 0
+    axA.text(0.02, 0.82, f"left of split: {lhs:.2f}% mismatch", transform=axA.transAxes, ha="left", fontsize=7.5, color="#555")
+    axA.text(0.98, 0.82, f"right of split: {rhs:.2f}% mismatch", transform=axA.transAxes, ha="right", fontsize=7.5, color="#555")
+    axA.set_ylabel("orig. mapping\nsubst. % (151 bp)", fontsize=7.5)
+    axA.set_title(f"{ev.get('sample','')} {ev.get('hap','')}  ·  {read_id}  ·  {chrom}:{pos:,}  ·  {svt} {svlen:+,} bp"
+                  f"  ·  ORIGINAL linear mapping: mismatches accumulate on one side → the aligner extended instead of "
+                  f"splitting (dashed = split point)", fontsize=8)
+    axA.spines[["top", "right"]].set_visible(False); axA.set_xticklabels([])
+
+    # ── Row B: read ↔ reference (per-fragment local windows) ───────────────────
+    axB = fig.add_subplot(gs[1]); axB.axis("off"); axB.set_xlim(0, 1); axB.set_ylim(0, 1)
+    RD_B, RD_T = 0.04, 0.18
+    BOX_B, BOX_T = 0.60, 0.78
+    axB.add_patch(mp.Rectangle((0, RD_B), 1, RD_T - RD_B, fc="#F5F5F5", ec="#888", lw=0.5))
+    axB.text(-0.012, (RD_B + RD_T) / 2, "read\n(query)", ha="right", va="center", fontsize=8)
+    axB.text(-0.012, (BOX_B + BOX_T) / 2, "reference\n(per fragment)", ha="right", va="center", fontsize=8)
+    n = len(fsort)
+    for i, f in enumerate(fsort):
         c = FRAGC[i % len(FRAGC)]
-        ax.add_patch(mp.Rectangle((qx(f["q_s"]), RD_B), qx(f["q_e"] - f["q_s"]), RD_T - RD_B,
-                                  fc=c, ec="none", alpha=0.9))
-        ax.annotate("", xy=(qx(f["q_e"] if f["strand"] == "+" else f["q_s"]), (RD_T + RD_B) / 2),
-                    xytext=(qx(f["q_s"] if f["strand"] == "+" else f["q_e"]), (RD_T + RD_B) / 2),
-                    arrowprops=dict(arrowstyle="-|>", color="white", lw=1.2))
-        # connector trapezoid read fragment -> reference span
-        ax.add_patch(Polygon([[qx(f["q_s"]), RD_T], [qx(f["q_e"]), RD_T],
-                              [rx(f["r_e"]), REF_B], [rx(f["r_s"]), REF_B]],
-                             closed=True, fc=c, alpha=0.16, ec="none"))
-    # junction marker
-    if jq is not None:
-        ax.plot([qx(jq)] * 2, [RD_B, RD_T], color="#C0392B", lw=2.5, zorder=6)
-        ax.text(qx(jq), RD_T + 0.02, f"{'Δ' if svt=='DEL' else '+'}{abs(svlen):,} bp",
-                ha="center", fontsize=8, color="#C0392B", fontweight="bold")
+        # read fragment
+        axB.add_patch(mp.Rectangle((qx(f["q_s"]), RD_B), qx(f["q_e"] - f["q_s"]), RD_T - RD_B, fc=c, alpha=0.9, ec="none"))
+        axB.annotate("", xy=(qx(f["q_e"] if f["strand"] == "+" else f["q_s"]), (RD_B + RD_T) / 2),
+                     xytext=(qx(f["q_s"] if f["strand"] == "+" else f["q_e"]), (RD_B + RD_T) / 2),
+                     arrowprops=dict(arrowstyle="-|>", color="white", lw=1.2))
+        # evenly-spaced reference box for this fragment
+        bx0 = 0.02 + i * (0.96 / n); bx1 = bx0 + 0.96 / n - 0.06
+        ivl = (pos - abs(svlen), pos) if (svt == "DEL" and not reproduced) else None
+        ref_box(axB, f, bx0, bx1, BOX_B, BOX_T, fa, chrom, c, sv_interval=ivl)
+        # ribbon read-fragment → its ref box
+        axB.add_patch(Polygon([[qx(f["q_s"]), RD_T], [qx(f["q_e"]), RD_T], [bx1, BOX_B], [bx0, BOX_B]],
+                              closed=True, fc=c, alpha=0.14, ec="none"))
+    # junction line on read
+    axB.plot([qx(junction_q)] * 2, [RD_B, RD_T], color="#C0392B", lw=2.5, zorder=6)
+    axB.text(qx(junction_q), RD_T + 0.015, f"split / {'Δ' if svt=='DEL' else '+' if svt=='INS' else ''}"
+             f"{abs(svlen):,} bp", ha="center", fontsize=7.5, color="#C0392B", fontweight="bold")
+    tag = ""
+    if reproduced:
+        tag = f"  —  split-and-map RE-MAPPED: 2 fragments map {abs(fsort[1]['r_s'] - fsort[0]['r_s'])/1e3:.0f} kb apart"
+        if svt == "INV":
+            tag += " on opposite strands"
+    elif n >= 2:
+        tag = "  —  native split read (SA tag from the aligner)"
+    axB.text(0.5, 0.93, f"How the read maps & is split{tag}", ha="center", fontsize=8.5, fontweight="bold")
 
-    nfr = len(frags)
-    tag = "  ·  split-and-map RE-MAPPED (2 fragments)" if reproduced else ""
-    if reproduced and nfr == 2:
-        tag += f"  ·  fragments map {abs(frags[1]['r_s'] - frags[0]['r_s'])/1e3:.0f} kb apart"
-    ax.set_title(f"{ev.get('sample','')} {ev.get('hap','')}  ·  {read_id}  ·  {chrom}:{pos:,}  ·  {svt} {svlen:+,} bp  "
-                 f"·  {nfr} fragment(s){tag}  ·  in_register={ev.get('in_register','?')} "
-                 f"(rem={ev.get('monomer_rem','?')})", fontsize=8.5)
-
-    # TRASH(read) detailed register track
-    axt = fig.add_subplot(gs[1]); axt.set_xlim(0, readlen); axt.set_ylim(0, 1)
-    if jq is not None:
-        axt.axvline(jq, color="#C0392B", lw=1.4, ls="--")
-        axt.axvspan(jq - MONO, jq + MONO, color="#C0392B", alpha=0.06)
+    # ── Row C: TRASH register on read, ±2 kb junction window highlighted ────────
+    axt = fig.add_subplot(gs[2]); axt.set_xlim(0, readlen); axt.set_ylim(0, 1)
+    axt.axvspan(junction_q - 2000, junction_q + 2000, color="#FFD54F", alpha=0.30, zorder=0)
+    axt.axvline(junction_q, color="#C0392B", lw=1.6, ls="--", zorder=4)
     for rp in read_reps:
         axt.add_patch(mp.Rectangle((rp["start"], 0.05), rp["end"] - rp["start"], 0.9,
-                                   fc=mono_color(rp["width"]), ec="white", lw=0.4))
+                                   fc=mono_color(rp["width"]), ec="white", lw=0.4, zorder=2))
     ncen = sum(1 for rp in read_reps if abs(rp["width"] - MONO) <= 2)
-    axt.text(0.99, 0.86, f"{ncen} CEN178 monomers in read", transform=axt.transAxes, ha="right",
-             va="top", fontsize=7.5, color="#1B5E20", fontweight="bold")
+    axt.text(0.5, 1.18, f"CEN178 register on the read  ·  ±2 kb around the junction shaded  ·  "
+             f"in_register={ev.get('in_register','?')} (rem={ev.get('monomer_rem','?')})  ·  {ncen} monomers",
+             transform=axt.transAxes, ha="center", va="bottom", fontsize=8.5, fontweight="bold")
     axt.set_yticks([]); axt.set_ylabel("TRASH\n(read)", fontsize=7.5)
     axt.set_xlabel("position in read (bp)", fontsize=8)
     axt.spines[["top", "right", "left"]].set_visible(False)
-
-    # legend / register note
-    axl = fig.add_subplot(gs[2]); axl.axis("off")
-    axl.text(0.0, 0.7, "Register check: if the CEN178 monomers tile continuously up to the red junction and the "
-             "deletion/insertion size is a whole number of 178-bp monomers, the array is IN-REGISTER "
-             "(unequal sister-chromatid HR). A phase break or non-monomer size = out-of-register.",
-             fontsize=8, va="top", wrap=True)
-    handles = [mp.Patch(fc="#2E7D32", label="178 bp monomer"), mp.Patch(fc="#F57F17", label="other 100-250 bp"),
-               mp.Patch(fc="#B71C1C", label="out of range")]
-    axl.legend(handles=handles, loc="lower left", ncol=3, fontsize=8, frameon=False)
+    handles = [mp.Patch(fc="#2E7D32", label="178 bp"), mp.Patch(fc="#F57F17", label="100-250 bp"),
+               mp.Patch(fc="#B71C1C", label="out of range"), mp.Patch(fc="#FFD54F", alpha=0.5, label="±2 kb of junction")]
+    axt.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, -0.65), ncol=4, fontsize=7.5, frameon=False)
 
     os.makedirs(outdir, exist_ok=True)
     out = f"{outdir}/{prefix}{ev.get('sample','x')}_{ev.get('hap','x')}_{chrom}_{pos}_{svt}.png"
