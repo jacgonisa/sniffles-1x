@@ -244,6 +244,7 @@ def load_singletons():
     if os.path.exists(p):
         for r in csv.DictReader(open(p), delimiter="\t"):
             r["svlen"] = int(r["svlen"]) if r["svlen"] not in ("", "None") else 0
+            r["pos"] = int(r["pos"])
             rows.append(r)
     return rows
 
@@ -263,6 +264,11 @@ def main():
     mler = fig_map(sub, "ler", f"{FIGDIR}/map_ler.png", orient, budget)
     kcol = fig_karyogram(sub, "col", f"{FIGDIR}/karyogram_col.png", orient, budget)
     kler = fig_karyogram(sub, "ler", f"{FIGDIR}/karyogram_ler.png", orient, budget)
+    # 1x (singleton) genome maps, same read-budget matching
+    sing = load_singletons()
+    subsing, _ = subsample_by_reads(sing, denom) if sing else ([], None)
+    mcol1 = fig_map(subsing, "col", f"{FIGDIR}/map_col_1x.png", orient, budget + " · 1× only") if subsing else ""
+    mler1 = fig_map(subsing, "ler", f"{FIGDIR}/map_ler_1x.png", orient, budget + " · 1× only") if subsing else ""
     b7 = fig_size_permillion(rows, denom, "size_per_million", " — all calls")
     b8 = fig_size_log10(rows, "size_log10", " — all calls")
     # 1x (singleton) events only
@@ -282,6 +288,8 @@ as the slides). artf1 control not yet available. Top strip of each genome map = 
 blue=reverse), from minimap2 of the 178-bp consensus. Large events (DEL up to ~12.7 Mb, INV up to ~11 Mb, DUP up to ~2.7 Mb).</p>
 <h2>1. Genome map — Col-HiFi</h2>{im(mcol, 'Each SV at its CEN coordinate; colour=type; dots sized by class, ≥5 kb as interval-spanning bars. Top strip = CEN178 forward(red)/reverse(blue) arrays. INV events sit at orientation boundaries.')}
 <h2>2. Genome map — Ler-HiFi</h2>{im(mler, 'Independent Ler haplotype/assembly, same encoding.')}
+<h2>1b. Genome map — Col-HiFi, 1× (singleton) events only</h2>{im(mcol1, 'Same map restricted to support=1 events.') if mcol1 else ''}
+<h2>2b. Genome map — Ler-HiFi, 1× (singleton) events only</h2>{im(mler1, 'Ler haplotype, 1× only.') if mler1 else ''}
 <h2>3. Genome-wide karyogram — Col-HiFi</h2>{im(kcol, 'Full chromosomes; grey arms, red/blue centromere = CEN178 orientation. SV ticks: leaf above the bar, pollen below. All events are centromeric.')}
 <h2>4. Genome-wide karyogram — Ler-HiFi</h2>{im(kler, 'Ler haplotype.')}
 <h2>5. Size spectrum — count per million CEN reads (all calls)</h2>{im(b7, 'Per-million-read SV rate by size bin and type (col+ler pooled). Pollen is enriched, especially at 10 kb–Mb scales (DEL/DUP/INV).')}

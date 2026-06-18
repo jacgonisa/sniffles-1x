@@ -195,6 +195,8 @@ per haplotype, ≈25k = pollen's depth) so leaf is not visually denser just from
 pollen carries more and longer large-SV bars.</p>
 <h3>6a. Genome map — Col-HiFi</h3>{imf('map_col', 'Read-budget matched (leaf downsampled to pollen depth). Each SV at its CEN coordinate; colour=type; dots sized by class, ≥5 kb as interval-spanning bars. Top strip = CEN178 forward(red)/reverse(blue) arrays; INV events sit at orientation boundaries.')}
 <h3>6b. Genome map — Ler-HiFi</h3>{imf('map_ler', 'Independent Ler haplotype/assembly, same encoding.')}
+<h3>6a′. Genome map — Col-HiFi, 1× (singleton) events only</h3>{imf('map_col_1x', 'Same map restricted to support=1 (single-molecule) events; read-budget matched.')}
+<h3>6b′. Genome map — Ler-HiFi, 1× (singleton) events only</h3>{imf('map_ler_1x', 'Ler haplotype, 1× only.')}
 <h3>6c. Genome-wide karyogram — Col-HiFi</h3>{imf('karyogram_col', 'Full chromosomes; grey arms, red/blue centromere = CEN178 orientation. SV ticks: leaf above bar, pollen below. All events are centromeric.')}
 <h3>6d. Genome-wide karyogram — Ler-HiFi</h3>{imf('karyogram_ler', 'Ler haplotype.')}
 <h3>6e. Size spectrum — count per million CEN reads (all calls)</h3>{imf('size_per_million', 'Per-million-read SV rate by size bin and type. Pollen enriched at 10 kb–Mb (DEL/DUP/INV).')}
