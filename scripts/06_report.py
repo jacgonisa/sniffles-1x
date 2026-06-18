@@ -237,23 +237,26 @@ it is only ~30× deep — so leaf's recurrent loci (mostly the fixed-vs-referenc
     if os.path.exists(ap):
         al = list(csv.DictReader(open(ap), delimiter="\t"))
         agg = defaultdict(lambda: Counter())
-        ireg = defaultdict(int); c178 = defaultdict(int)
+        ireg = defaultdict(int); inarr = defaultdict(int); ndi = defaultdict(int)
         for d in al:
             agg[d["tissue"]][d["confidence"]] += 1
-            ireg[d["tissue"]] += int(d["in_register"]); c178[d["tissue"]] += int(d["cen178"])
+            if d["svtype"] in ("DEL", "INS"):
+                ndi[d["tissue"]] += 1
+                ireg[d["tissue"]] += int(d["in_register"]); inarr[d["tissue"]] += int(d["in_cen180_array"] or 0)
         arow = "".join(
             f"<tr><td>{t}</td><td>{sum(agg[t].values())}</td><td>{agg[t]['HIGH']}</td><td>{agg[t]['MEDIUM']}</td>"
-            f"<td>{agg[t]['LOW']}</td><td>{ireg[t]} ({100*ireg[t]//max(sum(agg[t].values()),1)}%)</td>"
-            f"<td>{c178[t]}</td></tr>" for t in ("leaf", "pollen"))
-        ann = f"""<h2>9. Are the 1× events trustworthy? (per-read annotation)</h2>
+            f"<td>{agg[t]['LOW']}</td><td>{ndi[t]}</td><td>{inarr[t]} ({100*inarr[t]//max(ndi[t],1)}%)</td>"
+            f"<td>{ireg[t]} ({100*ireg[t]//max(ndi[t],1)}%)</td></tr>" for t in ("leaf", "pollen"))
+        ann = f"""<h2>9. Are the 1× events trustworthy? (per-read TRASH annotation)</h2>
 <p>A single read with an SV is either a real somatic molecule or a one-off artifact — support alone cannot tell them apart.
 Each 1× event is annotated with orthogonal evidence (<code>results/singleton_events_annotated.tsv</code>): the detector(s)
-that found it, the read's divergence (<code>de</code>) and MAPQ, and — the key one — <b>TRASH run on the read window around
-the breakpoint</b>. TRASH annotates CEN178 monomers on the actual molecule; <b>in_register</b> = a whole-CEN178-monomer
-event (|svlen| mod 178 ≈ 0) inside a TRASH-confirmed CEN178 array, i.e. the unequal-sister-chromatid-HR signature (vs an
-out-of-phase, NHEJ-like junction). Confidence = HIGH/MEDIUM/LOW from the combination (multi-detector agreement OR in-register,
-plus clean read and MAPQ). ~44–45% of singletons are in-register and most sit in confirmed CEN178 satellite.</p>
-<table><tr><th>tissue</th><th>1× events</th><th>HIGH</th><th>MEDIUM</th><th>LOW</th><th>in-register</th><th>CEN178-confirmed</th></tr>{arow}</table>
+that found it, the read's divergence (<code>de</code>) and MAPQ, and — the key one — <b>TRASH run on the full read</b>
+(the lab's canonical method, <code>analyze_deletions.py</code>). TRASH annotates the CEN178 monomers on the actual molecule;
+we then find the monomer immediately <b>left and right of the junction</b>. <b>in_CEN178_array</b> = both flanking monomers
+exist (the event is inside a satellite array); <b>in_register</b> = additionally a whole-CEN178-monomer event (|svlen| mod 178
+≈ 0) — the unequal-sister-chromatid-HR signature, vs an out-of-phase NHEJ-like junction. Confidence = HIGH/MEDIUM/LOW from the
+combination. Among DEL/INS singletons, ~77–85% sit in a confirmed CEN178 array and ~44–48% are in-register.</p>
+<table><tr><th>tissue</th><th>1× events</th><th>HIGH</th><th>MEDIUM</th><th>LOW</th><th>DEL/INS</th><th>in CEN178 array</th><th>in-register</th></tr>{arow}</table>
 <p class=cap style="font-size:12.5px;color:#666">Sorted, fully annotated list (start with the HIGH rows): <code>results/singleton_events_annotated.tsv</code>.</p>"""
 
     html = f"""<!doctype html><meta charset=utf-8><title>Single-molecule centromere SVs — WT</title>

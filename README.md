@@ -26,7 +26,8 @@ python scripts/08_read_qc.py         # read-quality controls (len/de/np/rq) -> r
 python scripts/10_cen178_orient.py   # CEN178 array orientation (minimap2) -> results/cen178_orientation.tsv
 python scripts/11_recurrence.py      # recurrent-locus VAF (hotspot vs fixed) -> results/recurrent_loci.tsv
 python scripts/12_support_distribution.py  # read-support per locus + 1x events (all-reads & read-budget-matched)
-/home/jg2070/miniforge3/bin/python scripts/13_annotate_singletons.py  # TRASH in-register + confidence (BASE python)
+/home/jg2070/miniforge3/bin/python scripts/13_annotate_singletons.py  # TRASH on FULL read, flanking-monomer in-register + confidence (BASE python)
+python scripts/make_diagrams.py      # docs/ algorithm + topology diagrams (for the repo)
 python scripts/09_pptx_figures.py    # genome maps (+orientation strip) + karyograms -> results/figures/
 python scripts/06_report.py          # -> report.html (run last; embeds 07-13 outputs)
 ```
