@@ -206,6 +206,26 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
 {bgtxt}
 <table><tr><th>tissue</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
 
+    # CEN vs ARM control (step 16)
+    armc = ""
+    ap2 = f"{OUT}/arm_control.tsv"
+    if os.path.exists(ap2):
+        al2 = list(csv.DictReader(open(ap2), delimiter="\t"))
+        trow = "".join(
+            f"<tr><td>{d['tissue']}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
+            f"<td>{d['arm_per_Mreads']}</td><td><b>{d['enrichment_CEN_over_ARM']}×</b></td></tr>" for d in al2)
+        armc = f"""<h2>12. Centromere vs chromosome-arm control (is the signal satellite-specific?)</h2>
+<p>The same per-read leadprov detection (CIGAR + native split) run on reads anchored in the chromosome <b>arms</b>
+(unique sequence) — windows starting <b>5 Mb past the centromere</b> so the CEN↔ARM transition/pericentromere is excluded.
+Arms are the no-satellite background. The CEN÷ARM ratio is the centromere-specific enrichment:</p>
+<table><tr><th>tissue</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{trow}</table>
+<div class=box><b>Reading it:</b> <b>DEL/INS/DUP are genuinely centromere-specific</b> (≈8–14× for DEL/INS, and DUP
+~74× in leaf / arm-absent in pollen) — real centromere instability, the unequal-HR signature. <b>BND is NOT enriched
+(ratio ≈ 1.0)</b> — the same rate in arm and CEN, i.e. a uniform background artifact, not centromere biology (this is the
+empirical justification for treating BND as noise). <b>leadprov INV is not CEN-enriched</b> (arms carry inverted repeats);
+the large satellite INVs come from split-and-map, which is not run on the arms here, so this control covers leadprov-detectable
+events only. <code>results/arm_control.tsv</code>.</div>"""
+
     import glob as _glob
     valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))
     val = ""
@@ -362,6 +382,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {ann}
 {val}
 {transloc}
+{armc}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""
