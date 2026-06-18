@@ -157,7 +157,7 @@ def cigar_junction(read, pos, svtype, svlen):
     return best[1] if best else None
 
 
-def draw(ev, bam, fa):
+def draw(ev, bam, fa, outdir=OUTDIR, prefix=""):
     chrom, pos, svt = ev["chrom"], int(ev["pos"]), ev["svtype"]
     svlen = int(ev["svlen"]); read_id = ev["read"]
     frags, prim = get_alignments(bam, chrom, pos, read_id, svlen)
@@ -258,9 +258,11 @@ def draw(ev, bam, fa):
                mp.Patch(fc="#B71C1C", label="out of range")]
     axl.legend(handles=handles, loc="lower left", ncol=3, fontsize=8, frameon=False)
 
-    out = f"{OUTDIR}/{ev.get('sample','x')}_{ev.get('hap','x')}_{chrom}_{pos}_{svt}.png"
+    os.makedirs(outdir, exist_ok=True)
+    out = f"{outdir}/{prefix}{ev.get('sample','x')}_{ev.get('hap','x')}_{chrom}_{pos}_{svt}.png"
     fig.savefig(out, dpi=140, bbox_inches="tight"); plt.close(fig)
     print(f"  wrote {out}")
+    return out
 
 
 def pick_examples():
@@ -284,11 +286,67 @@ def pick_examples():
     return out
 
 
+GALLERY = f"{OUT}/validation_gallery"
+
+
+def gallery():
+    """Curated set covering each case -> results/validation_gallery/ + index.html."""
+    rows = list(csv.DictReader(open(f"{OUT}/singleton_events_annotated.tsv"), delimiter="\t"))
+    for r in rows:
+        r["svlen"] = int(r["svlen"]); r["pos"] = int(r["pos"])
+    def sel(cond, n):
+        return [r for r in rows if cond(r)][:n]
+    cats = [
+        ("01_inregister_DEL", "In-register deletion (whole CEN178 monomers, HIGH)",
+         lambda r: r["svtype"] == "DEL" and r["in_register"] == "1" and r["confidence"] == "HIGH" and abs(r["svlen"]) >= 356, 3),
+        ("02_outofregister_DEL", "Out-of-register deletion (in CEN178 array, not a whole monomer)",
+         lambda r: r["svtype"] == "DEL" and r["in_register"] == "0" and r["in_cen180_array"] == "1", 2),
+        ("03_inregister_INS", "In-register insertion (whole CEN178 monomers)",
+         lambda r: r["svtype"] == "INS" and r["in_register"] == "1" and r["confidence"] == "HIGH", 2),
+        ("04_splitread_DEL", "Native split-read (aligner made the SA split, Sniffles-style)",
+         lambda r: r["methods"] == "SPLITREAD" and r["svtype"] == "DEL", 2),
+        ("05_splitandmap_DUP", "split-and-map duplication (we cut & re-map → fragments land apart)",
+         lambda r: "SPLITANDMAP" in r["methods"] and r["svtype"] == "DUP" and abs(r["svlen"]) >= 5000, 2),
+        ("06_splitandmap_INV", "split-and-map inversion (opposite-strand fragments)",
+         lambda r: "SPLITANDMAP" in r["methods"] and r["svtype"] == "INV", 2),
+    ]
+    os.makedirs(GALLERY, exist_ok=True)
+    cache = {}; sections = []
+    for prefix, desc, cond, n in cats:
+        evs = sel(cond, n)
+        print(f"[{prefix}] {len(evs)} events")
+        imgs = []
+        for ev in evs:
+            key = (ev["sample"], ev["hap"])
+            if key not in cache:
+                cache[key] = (pysam.AlignmentFile(bam_path(*key), "rb"), pysam.FastaFile(REF[ev["hap"]][0]))
+            try:
+                p = draw(ev, *cache[key], outdir=GALLERY, prefix=prefix + "__")
+                if p:
+                    imgs.append(os.path.basename(p))
+            except Exception as e:
+                print(f"   err {ev['read']}: {e}")
+        sections.append((desc, imgs))
+    html = ["<!doctype html><meta charset=utf-8><title>Read validation gallery</title>",
+            "<style>body{font-family:-apple-system,Arial,sans-serif;max-width:1200px;margin:0 auto;padding:20px}"
+            "h2{color:#C0392B;border-bottom:1px solid #eee;margin-top:26px}img{max-width:100%;border:1px solid #eee;margin:8px 0}</style>",
+            "<h1>Single-molecule SV — read validation gallery</h1>"]
+    for desc, imgs in sections:
+        html.append(f"<h2>{desc}</h2>")
+        for im in imgs:
+            html.append(f'<img src="{im}">')
+    open(f"{GALLERY}/index.html", "w").write("\n".join(html))
+    print(f"wrote {GALLERY}/index.html ({sum(len(i) for _, i in sections)} plots)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--read"); ap.add_argument("--pos", type=int)
     ap.add_argument("--sample"); ap.add_argument("--hap")
+    ap.add_argument("--gallery", action="store_true")
     a = ap.parse_args()
+    if a.gallery:
+        gallery(); print("DONE_VALIDATION"); return
     if a.read:
         rows = [r for r in csv.DictReader(open(f"{OUT}/singleton_events_annotated.tsv"), delimiter="\t")
                 if r["read"] == a.read and (a.pos is None or int(r["pos"]) == a.pos)]
