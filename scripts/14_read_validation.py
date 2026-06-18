@@ -100,14 +100,18 @@ def best_split(read):
     pre = [0] * (n + 1)
     for i in range(n):
         pre[i + 1] = pre[i] + mism[i]
-    best = None; q0, q1 = qpos[0], qpos[-1]
-    for i in range(1, n):
-        if qpos[i] - q0 < 1000 or q1 - qpos[i] < 1000:
+    mean = pre[n] / n; q0, q1 = qpos[0], qpos[-1]
+    cum = 0.0; best = None
+    for i in range(n):                     # CUSUM change-point (frontier), matches step 03
+        cum += mism[i] - mean
+        if i == 0 or qpos[i] - q0 < 1000 or q1 - qpos[i] < 1000:
             continue
-        c = abs((pre[n] - pre[i]) / (n - i) - pre[i] / i)
-        if best is None or c > best[1]:
-            best = (qpos[i], c)
-    return best[0] if best and best[1] >= 0.01 else None
+        if best is None or abs(cum) > best[1]:
+            best = (qpos[i], abs(cum), i)
+    if best is None:
+        return None
+    i = best[2]
+    return best[0] if abs((pre[n] - pre[i]) / (n - i) - pre[i] / i) >= 0.01 else None
 
 
 def reproduce_split(read, hap):

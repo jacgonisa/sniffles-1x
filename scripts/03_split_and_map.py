@@ -44,23 +44,28 @@ def best_split(read):
     n = len(qpos)
     if n < 200:
         return None
-    # prefix sum of mismatches; scan interior split points keeping >=MIN_FRAG query bp/side
+    # CUSUM change-point: locate the mismatch high<->low FRONTIER (not just the point of
+    # max global contrast, which is pulled toward a front-loaded noisy patch). The split is
+    # argmax |cumulative deviation from the mean mismatch rate|.
     pre = [0] * (n + 1)
     for i in range(n):
         pre[i + 1] = pre[i] + mism[i]
-    best = None
+    mean = pre[n] / n
     q0, q1 = qpos[0], qpos[-1]
-    for i in range(1, n):
-        if qpos[i] - q0 < MIN_FRAG or q1 - qpos[i] < MIN_FRAG:
+    cum = 0.0; best = None
+    for i in range(n):
+        cum += mism[i] - mean
+        if i == 0 or qpos[i] - q0 < MIN_FRAG or q1 - qpos[i] < MIN_FRAG:
             continue
-        lrate = pre[i] / i
-        rrate = (pre[n] - pre[i]) / (n - i)
-        c = abs(rrate - lrate)
-        if best is None or c > best[1]:
-            best = (qpos[i], c)
-    if best is None or best[1] < CONTRAST_MIN:
+        if best is None or abs(cum) > best[1]:
+            best = (qpos[i], abs(cum), i)
+    if best is None:
         return None
-    return best
+    i = best[2]
+    contrast = abs((pre[n] - pre[i]) / (n - i) - pre[i] / i)   # actual L/R rate gap at the cut
+    if contrast < CONTRAST_MIN:
+        return None
+    return (best[0], contrast)
 
 
 def extract(sample, hap):

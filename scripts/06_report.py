@@ -191,10 +191,12 @@ def main():
                      f"<b>leaf {float(bg['leaf']['per_million_reads']):.0f}/million reads vs pollen "
                      f"{float(bg['pollen']['per_million_reads']):.0f}/million</b> — ~"
                      f"{float(bg['pollen']['per_million_reads'])/max(float(bg['leaf']['per_million_reads']),1):.0f}× higher "
-                     f"in pollen (shorter pollen reads → shorter, more ambiguous fragments). <b>Implication:</b> the pollen "
-                     f"enrichment in the <i>split-and-map</i> classes (DUP/INV/BND) is partly inflated by this elevated "
-                     f"background and should be read cautiously; the <i>CIGAR</i> DEL/INS signal (no re-mapping, register-checked) "
-                     f"is not affected by it. <code>results/crossmap_background.tsv</code>.</div>")
+                     f"in pollen. Per split-and-map <i>attempt</i>, pollen cross-maps ~3.4× more often than leaf "
+                     f"(≈59% vs ≈17% of split calls become inter-CEN BND), consistent with its shorter re-mapped fragments "
+                     f"(median ≈6.8 kb vs ≈9.5 kb) — though genuinely more inter-CEN rearrangement in pollen cannot be "
+                     f"excluded from single reads. <b>Implication:</b> the pollen enrichment in the <i>split-and-map</i> classes "
+                     f"(DUP/INV/BND) is partly inflated by this background and should be read cautiously; the <i>CIGAR</i> "
+                     f"DEL/INS signal (no re-mapping, register-checked) is not affected. <code>results/crossmap_background.tsv</code>.</div>")
         transloc = f"""<h2>11. Translocations (BND) &amp; the cross-mapping noise floor</h2>
 <p>A read whose two fragments map to <b>different contigs</b> is classified <b>BND</b> by
 <code>sv.classify_splits</code> — the inter-chromosomal / translocation class. <b>{len(tl)} BND calls</b>
@@ -214,17 +216,52 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
         trow = "".join(
             f"<tr><td>{d['tissue']}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
             f"<td>{d['arm_per_Mreads']}</td><td><b>{d['enrichment_CEN_over_ARM']}×</b></td></tr>" for d in al2)
+        armsm = ""
+        sp = f"{OUT}/arm_splitmap_control.tsv"
+        if os.path.exists(sp):
+            sl = list(csv.DictReader(open(sp), delimiter="\t"))
+            srow = "".join(
+                f"<tr><td>{d['tissue']}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
+                f"<td>{d['arm_per_Mreads']}</td><td><b>{d['enrichment_CEN_over_ARM']}×</b></td></tr>" for d in sl)
+            armsm = f"""<h3>12b. Same control on the split-and-map route</h3>
+<table><tr><th>tissue</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{srow}</table>
+<div class=box style="background:#FDEDEC;border-left:4px solid #C0392B"><b>Reading the split-and-map route:</b>
+<b>DEL is robustly real</b> (~55× CEN, and it still occurs in unique arm sequence). <b>BND in the arm is zero</b> —
+unique sequence cannot cross-map, confirming split-and-map BND in the CEN is satellite cross-mapping. <b>DUP/INV are
+arm-absent (∞), but that is NOT proof they are real</b>: a forced split of unique-sequence fragments structurally cannot
+produce a DUP/INV (no overlapping/cross mapping), so the arm gives no usable baseline for these two — they are
+satellite-exclusive by construction and remain confounded between true CEN rearrangement and satellite mapping.</div>"""
         armc = f"""<h2>12. Centromere vs chromosome-arm control (is the signal satellite-specific?)</h2>
 <p>The same per-read leadprov detection (CIGAR + native split) run on reads anchored in the chromosome <b>arms</b>
 (unique sequence) — windows starting <b>5 Mb past the centromere</b> so the CEN↔ARM transition/pericentromere is excluded.
 Arms are the no-satellite background. The CEN÷ARM ratio is the centromere-specific enrichment:</p>
 <table><tr><th>tissue</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{trow}</table>
-<div class=box><b>Reading it:</b> <b>DEL/INS/DUP are genuinely centromere-specific</b> (≈8–14× for DEL/INS, and DUP
-~74× in leaf / arm-absent in pollen) — real centromere instability, the unequal-HR signature. <b>BND is NOT enriched
-(ratio ≈ 1.0)</b> — the same rate in arm and CEN, i.e. a uniform background artifact, not centromere biology (this is the
-empirical justification for treating BND as noise). <b>leadprov INV is not CEN-enriched</b> (arms carry inverted repeats);
-the large satellite INVs come from split-and-map, which is not run on the arms here, so this control covers leadprov-detectable
-events only. <code>results/arm_control.tsv</code>.</div>"""
+<div class=box><b>Reading the leadprov route:</b> <b>DEL/INS/DUP are genuinely centromere-specific</b> (≈8–14× for DEL/INS, DUP
+~74× in leaf) — real centromere instability. <b>BND is NOT enriched (ratio ≈ 1.0)</b> — same rate in arm and CEN, i.e. a
+uniform background (justifies treating native-split BND as noise). leadprov INV is not CEN-enriched (arms carry inverted
+repeats).</p>{armsm}
+<p class=cap style="font-size:12.5px;color:#666"><code>results/arm_control.tsv</code> · <code>results/arm_splitmap_control.tsv</code></p>"""
+
+    # SV source breakdown (step 17)
+    srcbreak = ""
+    sb = f"{OUT}/source_breakdown.tsv"
+    if os.path.exists(sb):
+        sbl = list(csv.DictReader(open(sb), delimiter="\t"))
+        label = {"CIGAR": "CIGAR (inline indel)", "SPLITREAD": "SPLITREAD (aligner SA split)",
+                 "SPLITANDMAP": "SPLITANDMAP (we split + re-map)", "CIGAR+SPLITANDMAP": "CIGAR + SPLITANDMAP (both)"}
+        rws = "".join(
+            f"<tr><td>{label.get(d['methods'], d['methods'])}</td><td>{d['calls']}</td>"
+            f"<td>{d['pct_in_register']}% ({d['in_register']})</td><td>{d['DEL']}</td><td>{d['INS']}</td>"
+            f"<td>{d['DUP']}</td><td>{d['INV']}</td><td>{d['BND']}</td></tr>" for d in sbl)
+        srcbreak = f"""<h2>13. Where the calls come from (detection route) &amp; in-register by route</h2>
+<p>Each call is found by one or more routes: <b>CIGAR</b> (inline I/D in a single alignment), <b>SPLITREAD</b>
+(the aligner already split the read via its <code>SA</code> tag — Sniffles-compatible), <b>SPLITANDMAP</b> (we split the
+read at the contrast frontier and re-mapped — not visible to stock Sniffles). in-register = whole-CEN178-monomer fraction
+(|svlen| mod 178 heuristic; the rigorous TRASH version is §9, singletons).</p>
+<table><tr><th>route</th><th>calls</th><th>in-register</th><th>DEL</th><th>INS</th><th>DUP</th><th>INV</th><th>BND</th></tr>{rws}</table>
+<div class=box>CIGAR (86.7%) and SPLITANDMAP (83.0%) are both highly in-register — and the split-and-map frontier fix
+(CUSUM change-point) lifted SPLITANDMAP from 60% to 83%, i.e. cutting at the true clean/noisy boundary makes the re-mapped
+fragments align at monomer boundaries. SPLITREAD is lower (many are large non-monomer junctions / BND).</div>"""
 
     import glob as _glob
     valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))
@@ -383,6 +420,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {val}
 {transloc}
 {armc}
+{srcbreak}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""
