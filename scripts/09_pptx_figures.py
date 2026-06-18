@@ -193,7 +193,7 @@ def fig_karyogram(rows, hap, path, orient, budget=""):
     img = b64(fig); open(path, "wb").write(base64.b64decode(img)); return img
 
 
-def fig_size_permillion(rows, denom):
+def fig_size_permillion(rows, denom, out="size_per_million", tag=""):
     # pool col+ler; per million CEN reads
     permillion = {s: sum(denom[(s, h)] for h in HAPS) / 1e6 for s in SAMPLE_ROWS}
     cnt = {(s, t): [0] * len(BINLAB) for s in SAMPLE_ROWS for t in TYPE4}
@@ -214,11 +214,11 @@ def fig_size_permillion(rows, denom):
         ax.set_xlabel("width")
     axes[0].set_ylabel("count per million reads")
     axes[0].legend(fontsize=9, title="sample")
-    fig.suptitle("SV size spectrum, count per million CEN reads (col+ler pooled) — large SVs enriched in pollen")
-    img = b64(fig); open(f"{FIGDIR}/size_per_million.png", "wb").write(base64.b64decode(img)); return img
+    fig.suptitle(f"SV size spectrum, count per million CEN reads (col+ler pooled){tag}")
+    img = b64(fig); open(f"{FIGDIR}/{out}.png", "wb").write(base64.b64decode(img)); return img
 
 
-def fig_size_log10(rows):
+def fig_size_log10(rows, out="size_log10", tag=""):
     fig, axes = plt.subplots(len(SAMPLE_ROWS), 4, figsize=(15, 2.6 * len(SAMPLE_ROWS)), squeeze=False)
     line = np.log10(MONO)
     bins = np.linspace(1, 7, 40)
@@ -234,8 +234,18 @@ def fig_size_log10(rows):
             if j == 0: ax.set_ylabel(f"{s}\nProportion", fontsize=9)
             if i == len(SAMPLE_ROWS) - 1: ax.set_xlabel("log10(width)")
             ax.set_xlim(1, 7)
-    fig.suptitle("SV size distribution (proportion); red dashed = 178 bp CEN178 monomer")
-    img = b64(fig); open(f"{FIGDIR}/size_log10.png", "wb").write(base64.b64decode(img)); return img
+    fig.suptitle(f"SV size distribution (proportion); red dashed = 178 bp CEN178 monomer{tag}")
+    img = b64(fig); open(f"{FIGDIR}/{out}.png", "wb").write(base64.b64decode(img)); return img
+
+
+def load_singletons():
+    rows = []
+    p = f"{OUT}/singleton_events.tsv"
+    if os.path.exists(p):
+        for r in csv.DictReader(open(p), delimiter="\t"):
+            r["svlen"] = int(r["svlen"]) if r["svlen"] not in ("", "None") else 0
+            rows.append(r)
+    return rows
 
 
 def main():
@@ -253,8 +263,12 @@ def main():
     mler = fig_map(sub, "ler", f"{FIGDIR}/map_ler.png", orient, budget)
     kcol = fig_karyogram(sub, "col", f"{FIGDIR}/karyogram_col.png", orient, budget)
     kler = fig_karyogram(sub, "ler", f"{FIGDIR}/karyogram_ler.png", orient, budget)
-    b7 = fig_size_permillion(rows, denom)
-    b8 = fig_size_log10(rows)
+    b7 = fig_size_permillion(rows, denom, "size_per_million", " — all calls")
+    b8 = fig_size_log10(rows, "size_log10", " — all calls")
+    # 1x (singleton) events only
+    singles = load_singletons()
+    b7s = fig_size_permillion(singles, denom, "size_per_million_1x", " — 1× (singleton) events only") if singles else ""
+    b8s = fig_size_log10(singles, "size_log10_1x", " — 1× (singleton) events only") if singles else ""
 
     def im(b, cap):
         return f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}"><figcaption>{cap}</figcaption></figure>'
@@ -270,8 +284,10 @@ blue=reverse), from minimap2 of the 178-bp consensus. Large events (DEL up to ~1
 <h2>2. Genome map — Ler-HiFi</h2>{im(mler, 'Independent Ler haplotype/assembly, same encoding.')}
 <h2>3. Genome-wide karyogram — Col-HiFi</h2>{im(kcol, 'Full chromosomes; grey arms, red/blue centromere = CEN178 orientation. SV ticks: leaf above the bar, pollen below. All events are centromeric.')}
 <h2>4. Genome-wide karyogram — Ler-HiFi</h2>{im(kler, 'Ler haplotype.')}
-<h2>5. Size spectrum — count per million CEN reads</h2>{im(b7, 'Per-million-read SV rate by size bin and type (col+ler pooled). Pollen is enriched, especially at 10 kb–Mb scales (DEL/DUP/INV).')}
-<h2>6. Size distribution — log10(width)</h2>{im(b8, 'Per-facet proportion; red dashed = 178 bp. Pollen carries a heavy large-size tail absent/weak in leaf.')}"""
+<h2>5. Size spectrum — count per million CEN reads (all calls)</h2>{im(b7, 'Per-million-read SV rate by size bin and type (col+ler pooled). Pollen is enriched, especially at 10 kb–Mb scales (DEL/DUP/INV).')}
+<h2>6. Size distribution — log10(width) (all calls)</h2>{im(b8, 'Per-facet proportion; red dashed = 178 bp. Pollen carries a heavy large-size tail absent/weak in leaf.')}
+<h2>7. Size spectrum — 1× (singleton) events only</h2>{im(b7s, 'Same as §5 but restricted to support=1 events (one read each). The single-molecule size spectrum.')}
+<h2>8. Size distribution — 1× (singleton) events only</h2>{im(b8s, 'log10(width) of singleton events; red dashed = 178 bp.')}"""
     open(HTML, "w").write(html)
     print(f"wrote {HTML}"); print("DONE_PPTX_FIGS")
 

@@ -178,8 +178,10 @@ pollen carries more and longer large-SV bars.</p>
 <h3>6b. Genome map — Ler-HiFi</h3>{imf('map_ler', 'Independent Ler haplotype/assembly, same encoding.')}
 <h3>6c. Genome-wide karyogram — Col-HiFi</h3>{imf('karyogram_col', 'Full chromosomes; grey arms, red/blue centromere = CEN178 orientation. SV ticks: leaf above bar, pollen below. All events are centromeric.')}
 <h3>6d. Genome-wide karyogram — Ler-HiFi</h3>{imf('karyogram_ler', 'Ler haplotype.')}
-<h3>6e. Size spectrum — count per million CEN reads</h3>{imf('size_per_million', 'Per-million-read SV rate by size bin and type. Pollen enriched at 10 kb–Mb (DEL/DUP/INV).')}
-<h3>6f. Size distribution — log10(width)</h3>{imf('size_log10', 'Per-facet proportion; red dashed = 178 bp. Pollen carries a heavy large-size tail absent/weak in leaf.')}"""
+<h3>6e. Size spectrum — count per million CEN reads (all calls)</h3>{imf('size_per_million', 'Per-million-read SV rate by size bin and type. Pollen enriched at 10 kb–Mb (DEL/DUP/INV).')}
+<h3>6f. Size distribution — log10(width) (all calls)</h3>{imf('size_log10', 'Per-facet proportion; red dashed = 178 bp. Pollen carries a heavy large-size tail absent/weak in leaf.')}
+<h3>6g. Size spectrum — 1× (singleton) events only</h3>{imf('size_per_million_1x', 'Same as 6e but restricted to support=1 events (one read each) — the single-molecule size spectrum. Same pollen large-SV enrichment.')}
+<h3>6h. Size distribution — 1× (singleton) events only</h3>{imf('size_log10_1x', 'log10(width) of singleton events; red dashed = 178 bp.')}"""
 
     # recurrence section (step 11)
     recur = ""

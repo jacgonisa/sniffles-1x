@@ -12,6 +12,20 @@ a single read (1× "coverage")** — something stock Sniffles2 will not do.
 
 ---
 
+## Diagrams
+
+**How a read becomes a single-molecule SV call** (and which Sniffles stages are skipped):
+
+![algorithm flow](docs/algorithm_flow.png)
+
+**How `sv.classify_splits` infers the SV type from the Part1/Part2 mapping topology** — the
+read is split into two fragments (by a clean `SA` split, or by our split-and-map), and the SV
+type follows from their strand and reference/query coordinates:
+
+![topology](docs/topology.png)
+
+---
+
 ## 1. Why stock Sniffles2 "needs coverage", and which part actually does
 
 Sniffles2 runs in three stages:

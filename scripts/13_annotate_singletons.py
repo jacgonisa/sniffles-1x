@@ -1,77 +1,113 @@
 #!/usr/bin/env python3
-"""Step 13 — annotate the 1x (singleton) events with trustworthiness flags.
+"""Step 13 — annotate the 1x (singleton) events with TRASH-based in-register phase.
 
-A single read carrying an SV (support=1) is either a genuine somatic single molecule or a
-one-off mapping/sequencing artifact — support alone cannot tell them apart. We add the
-orthogonal evidence:
-
-  methods      which detector(s) found it (CIGAR / SPLITREAD / SPLITANDMAP); multi = corroborated
-  read_de      gap-compressed divergence of the read (low = clean read, not a noisy mapping)
-  mapq         mapping quality of the read at the locus
-  TRASH on the READ window around the breakpoint -> n_monomers, mono_mean_w, cen178 (satellite?)
-  in_register  whole-CEN178-monomer event (|svlen|%178 ~ 0) AND TRASH confirms a CEN178 array
-               = unequal-sister-chromatid-HR signature (vs out-of-phase NHEJ-like)
-  confidence   HIGH / MEDIUM / LOW from the combination above
+Replicates the lab's canonical phase method (insertion_origin/scripts/analyze_deletions.py):
+TRASH is run on the FULL read, then for the event junction we find the CEN178 monomer
+immediately LEFT and immediately RIGHT of the junction. The event is in a CEN178 array only
+if BOTH flanking monomers exist (in_cen180_array); the breakpoint phase position within the
+178-bp monomer is bp_pos = (read_pos - last_left_monomer.start) % 178. in_register = whole
+monomer (|svlen| % 178 within 20) AND in_cen180_array — the unequal-sister-chromatid-HR
+signature. Also records detector(s), read de, MAPQ -> confidence HIGH/MEDIUM/LOW.
 
 -> results/singleton_events_annotated.tsv
-Run with BASE python (has trash_py + pysam):
+Run with BASE python (trash_py + pysam):
   /home/jg2070/miniforge3/bin/python 13_annotate_singletons.py
 """
 import sys, os, csv, tempfile
-from collections import defaultdict
+from collections import defaultdict, Counter
 from types import SimpleNamespace
 sys.path.insert(0, "/mnt/ssd-4tb/HIFI_NAMIL/insertion_origin/trash-py/src")
 sys.path.insert(0, "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/scripts")
 import pysam
 import trash_py.pipeline as _tp, trash_py._log as _tl
-from common import bam_path, OUT, MONO, TOL
+from common import bam_path, OUT
 
-TPL = ("CEN178", "AGTATAAGAACTTAAACCGCAACCGATCTTAAAAGCCTAAGTAGTGTTTCCTTGTTAGAA"
-       "GACACAAAGCCAAAGACTCATATGGACTTTGGCTACACCATGAAAGCTTTGAGAAGCAAG"
-       "AAGAAGGTTGGTTAGTGTTTTGGAGTCGAATATGACTTGATGTCATGTGTATGATTG")
-WIN = 1500          # bp each side of the breakpoint extracted from the read for TRASH
+MONOMER_BP = 178
+PHASE_TOL = 20
+CEN178 = ("CEN178", "AGTATAAGAACTTAAACCGCAACCGATCTTAAAAGCCTAAGTAGTGTTTCCTTGTTAGAA"
+          "GACACAAAGCCAAAGACTCATATGGACTTTGGCTACACCATGAAAGCTTTGAGAAGCAAG"
+          "AAGAAGGTTGGTTAGTGTTTTGGAGTCGAATATGACTTGATGTCATGTGTATGATTG")
 
-
-def run_trash(seq):
-    """Return (n_monomers, mean_width) of CEN178-template repeats in seq."""
-    if not seq or len(seq) < 200:
-        return 0, 0.0
-    _tl.configure(quiet=True)
-    with tempfile.TemporaryDirectory() as td:
-        fa = os.path.join(td, "s.fasta"); tp = os.path.join(td, "t.fasta")
-        open(fa, "w").write(f">r\n{seq}\n"); open(tp, "w").write(f">{TPL[0]}\n{TPL[1]}\n")
-        try:
-            _tp.run_pipeline(SimpleNamespace(fasta=fa, output=td, max_rep_size=250,
-                                             min_rep_size=100, templates=tp, processes=1))
-        except Exception:
-            pass
-        rf = os.path.join(td, "s.fasta_repeats.csv"); w = []
-        if os.path.exists(rf):
-            for r in csv.DictReader(open(rf)):
-                w.append(int(r["width"]))
-    return len(w), (sum(w) / len(w) if w else 0.0)
+_trash_cache = {}
 
 
-def read_window(bam, chrom, pos, read_name):
-    """Read sequence ±WIN around the breakpoint (read coords), plus de & mapq."""
-    for rd in bam.fetch(chrom, max(0, pos - 2000), pos + 2000):
-        if rd.query_name != read_name or rd.is_secondary:
+def run_trash_full(seq, key):
+    """Run TRASH on the FULL read sequence; return list of {start,end,width} (0-based)."""
+    if key in _trash_cache:
+        return _trash_cache[key]
+    reps = []
+    if seq and len(seq) >= 250:
+        _tl.configure(quiet=True)
+        with tempfile.TemporaryDirectory() as td:
+            fa = os.path.join(td, "s.fasta"); tp = os.path.join(td, "t.fasta")
+            open(fa, "w").write(f">r\n{seq}\n"); open(tp, "w").write(f">{CEN178[0]}\n{CEN178[1]}\n")
+            try:
+                _tp.run_pipeline(SimpleNamespace(fasta=fa, output=td, max_rep_size=250,
+                                                 min_rep_size=100, templates=tp, processes=1))
+            except Exception:
+                pass
+            rf = os.path.join(td, "s.fasta_repeats.csv")
+            if os.path.exists(rf):
+                for row in csv.DictReader(open(rf)):
+                    reps.append({"start": int(row["start"]) - 1, "end": int(row["end"]), "width": int(row["width"])})
+    _trash_cache[key] = reps
+    return reps
+
+
+def find_read_junction(bam, chrom, ref_pos, svtype, svlen, read_id):
+    """Return (read.query_sequence, read_pos_at_junction, de, mapq) or (None,...).
+    Locates the I/D CIGAR op of ~|svlen| nearest ref_pos in the read carrying the event."""
+    size = abs(svlen)
+    lo = max(0, ref_pos - size - 3000)
+    for r in bam.fetch(chrom, lo, ref_pos + 3000):
+        if r.query_name != read_id or r.is_unmapped or r.is_secondary or not r.cigartuples:
             continue
-        de = rd.get_tag("de") if rd.has_tag("de") else -1
-        rp = None
-        for qp, refp in rd.get_aligned_pairs():
-            if refp is not None and refp >= pos and qp is not None:
-                rp = qp; break
-        if rp is None:
-            rp = (rd.query_alignment_start + rd.query_alignment_end) // 2
-        seq = rd.query_sequence
-        return (seq[max(0, rp - WIN):rp + WIN] if seq else None, de, rd.mapping_quality)
-    return None, -1, -1
+        de = r.get_tag("de") if r.has_tag("de") else -1
+        rpos = r.reference_start; qpos = 0; best = None
+        for op, l in r.cigartuples:
+            if op in (0, 7, 8):              # M/=/X
+                rpos += l; qpos += l
+            elif op == 1:                    # I (insertion)
+                if svtype == "INS" and abs(l - size) <= max(15, size * 0.1):
+                    d = abs(rpos - ref_pos)
+                    if best is None or d < best[0]:
+                        best = (d, qpos)     # read pos = start of insertion
+                qpos += l
+            elif op == 2:                    # D (deletion)
+                if svtype == "DEL" and abs(l - size) <= max(15, size * 0.1):
+                    d = abs(rpos - ref_pos)
+                    if best is None or d < best[0]:
+                        best = (d, qpos)     # read pos = junction (deletion collapsed)
+                rpos += l
+            elif op in (4, 5):               # S/H
+                qpos += l
+        if best is not None:
+            return r.query_sequence, best[1], de, r.mapping_quality
+        # event present but not a single CIGAR op (split) — still return read for context
+        return r.query_sequence, None, de, r.mapping_quality
+    return None, None, -1, -1
+
+
+def phase(reps, read_pos, svtype, svlen):
+    """Flanking-monomer phase around the junction (canonical method)."""
+    if read_pos is None or not reps:
+        return {}
+    size = abs(svlen)
+    right_anchor = read_pos + size if svtype == "INS" else read_pos
+    left = [r for r in reps if r["end"] <= read_pos]
+    right = [r for r in reps if r["start"] >= right_anchor]
+    if not left or not right:
+        return {"in_cen180_array": 0}
+    last_L = max(left, key=lambda r: r["end"]); first_R = min(right, key=lambda r: r["start"])
+    rem = size % MONOMER_BP
+    in_phase = (rem <= PHASE_TOL) or (rem >= MONOMER_BP - PHASE_TOL)
+    return {"in_cen180_array": 1, "phase_rem": rem, "in_phase": int(in_phase),
+            "bp_pos": (read_pos - last_L["start"]) % MONOMER_BP,
+            "n_left": len(left), "n_right": len(right)}
 
 
 def main():
     sing = list(csv.DictReader(open(f"{OUT}/singleton_events.tsv"), delimiter="\t"))
-    # methods per (sample,hap,read,svtype) from the merged calls
     methods = {}
     for r in csv.DictReader(open(f"{OUT}/sm_sv_calls.tsv"), delimiter="\t"):
         methods[(r["sample"], r["hap"], r["read"], r["svtype"])] = r["methods"]
@@ -80,22 +116,23 @@ def main():
     for e in sing:
         by_bam[(e["sample"], e["hap"])].append(e)
 
-    out = []
-    done = 0
+    out = []; done = 0
     for (sample, hap), events in by_bam.items():
         bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
         for e in events:
             pos = int(e["pos"]); svlen = int(e["svlen"]) if e["svlen"] not in ("", "None") else 0
-            seq, de, mapq = read_window(bam, e["chrom"], pos, e["read"])
-            nmono, meanw = run_trash(seq) if seq else (0, 0.0)
-            cen178 = nmono >= 3 and 165 <= meanw <= 188
-            rem = abs(svlen) % MONO if svlen else None
-            whole_mono = svlen != 0 and (rem <= TOL or rem >= MONO - TOL)
-            in_reg = bool(cen178 and whole_mono and e["svtype"] in ("DEL", "INS", "DUP"))
-            meth = methods.get((sample, hap, e["read"], e["svtype"]), "?")
+            svt = e["svtype"]
+            seq, read_pos, de, mapq = find_read_junction(bam, e["chrom"], pos, svt, svlen, e["read"])
+            reps = run_trash_full(seq, (sample, hap, e["read"])) if seq else []
+            nmono = len(reps)
+            widths = [r["width"] for r in reps]
+            cen178 = nmono >= 3 and (165 <= (sum(widths) / nmono) <= 188)
+            ph = phase(reps, read_pos, svt, svlen) if svt in ("DEL", "INS") else {}
+            in_array = ph.get("in_cen180_array", 0)
+            in_reg = int(bool(in_array and ph.get("in_phase", 0)))
+            meth = methods.get((sample, hap, e["read"], svt), "?")
             multi = "+" in meth
             clean = 0 <= de <= 0.01
-            # confidence
             if (multi or in_reg) and clean and mapq >= 20:
                 conf = "HIGH"
             elif (multi or in_reg or cen178) and mapq >= 10:
@@ -103,34 +140,31 @@ def main():
             else:
                 conf = "LOW"
             out.append({**e, "methods": meth, "mapq": mapq, "read_de": round(de, 4) if de >= 0 else "",
-                        "n_monomers": nmono, "mono_mean_w": round(meanw, 1), "cen178": int(cen178),
-                        "monomer_rem": rem if rem is not None else "", "in_register": int(in_reg),
-                        "confidence": conf})
+                        "n_monomers": nmono, "cen178": int(cen178), "in_cen180_array": in_array,
+                        "monomer_rem": ph.get("phase_rem", ""), "bp_pos": ph.get("bp_pos", ""),
+                        "in_register": in_reg, "confidence": conf})
             done += 1
             if done % 200 == 0:
-                print(f"  ...{done}/{len(sing)}")
+                print(f"  ...{done}/{len(sing)}  (TRASH cache {len(_trash_cache)})")
         bam.close()
 
     cols = ["sample", "hap", "tissue", "chrom", "pos", "svtype", "svlen", "methods", "mapq",
-            "read_de", "n_monomers", "mono_mean_w", "cen178", "monomer_rem", "in_register",
-            "confidence", "read"]
+            "read_de", "n_monomers", "cen178", "in_cen180_array", "monomer_rem", "bp_pos",
+            "in_register", "confidence", "read"]
     with open(f"{OUT}/singleton_events_annotated.tsv", "w") as f:
         f.write("\t".join(cols) + "\n")
-        for d in sorted(out, key=lambda d: (d["confidence"] != "HIGH", d["confidence"] != "MEDIUM",
-                                            d["sample"], d["hap"], d["chrom"], int(d["pos"]))):
+        order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+        for d in sorted(out, key=lambda d: (order[d["confidence"]], d["sample"], d["hap"], d["chrom"], int(d["pos"]))):
             f.write("\t".join(str(d.get(c, "")) for c in cols) + "\n")
 
-    # summary
-    from collections import Counter
-    print("=== singleton annotation summary ===")
+    print("=== singleton annotation summary (TRASH on full read; flanking-monomer phase) ===")
     for tis in ("leaf", "pollen"):
         sub = [d for d in out if d["tissue"] == tis]
-        conf = Counter(d["confidence"] for d in sub)
-        ireg = sum(d["in_register"] for d in sub)
-        c178 = sum(d["cen178"] for d in sub)
-        multi = sum(1 for d in sub if "+" in d["methods"])
-        print(f"{tis}: n={len(sub)}  HIGH={conf['HIGH']} MED={conf['MEDIUM']} LOW={conf['LOW']}  "
-              f"in_register={ireg} ({100*ireg/max(len(sub),1):.0f}%)  cen178={c178}  multi_method={multi}")
+        c = Counter(d["confidence"] for d in sub)
+        ind = [d for d in sub if d["svtype"] in ("DEL", "INS")]
+        ireg = sum(d["in_register"] for d in ind); inarr = sum(d["in_cen180_array"] for d in ind)
+        print(f"{tis}: n={len(sub)}  HIGH={c['HIGH']} MED={c['MEDIUM']} LOW={c['LOW']}  | DEL/INS={len(ind)} "
+              f"in_CEN178_array={inarr} in_register={ireg} ({100*ireg/max(len(ind),1):.0f}% of DEL/INS)")
     print("DONE_ANNOTATE")
 
 
