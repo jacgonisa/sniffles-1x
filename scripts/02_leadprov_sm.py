@@ -64,13 +64,15 @@ def split_leads(read, contig):
         for svtype, svstart, arg in (ld.svtypes_starts_lens or []):
             if svtype == "NOSV":
                 continue
-            svlen = None if svtype == "BND" else arg
-            yield (svtype, svstart, svlen, ld.mapq)
+            if svtype == "BND":   # arg = SVCallBNDInfo(mate_contig, mate_ref_start, ...)
+                yield (svtype, svstart, None, ld.mapq, f"{arg.mate_contig}:{arg.mate_ref_start}")
+            else:
+                yield (svtype, svstart, arg, ld.mapq, "")
 
 
 def run():
     out = open(f"{OUT}/leadprov_sm.tsv", "w")
-    out.write("sample\thap\ttissue\tchrom\tpos\tsvtype\tsvlen\tsource\tmapq\tread\n")
+    out.write("sample\thap\ttissue\tchrom\tpos\tsvtype\tsvlen\tsource\tmapq\tread\tmate\n")
     for sample, tis in SAMPLES:
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
@@ -83,13 +85,13 @@ def run():
                         continue
                     for svtype, pos, svlen in cigar_leads(r):
                         if a <= pos < b:
-                            out.write(f"{sample}\t{hap}\t{tis}\t{chrom}\t{pos}\t{svtype}\t{svlen}\tINLINE\t{r.mapping_quality}\t{r.query_name}\n"); n += 1
-                    for svtype, pos, svlen, mapq in split_leads(r, chrom):
+                            out.write(f"{sample}\t{hap}\t{tis}\t{chrom}\t{pos}\t{svtype}\t{svlen}\tINLINE\t{r.mapping_quality}\t{r.query_name}\t\n"); n += 1
+                    for svtype, pos, svlen, mapq, mate in split_leads(r, chrom):
                         if mapq < MAPQ_MIN:
                             continue
                         if a <= pos < b:
                             sl = "" if svlen is None else svlen
-                            out.write(f"{sample}\t{hap}\t{tis}\t{chrom}\t{pos}\t{svtype}\t{sl}\tSPLIT\t{mapq}\t{r.query_name}\n"); n += 1
+                            out.write(f"{sample}\t{hap}\t{tis}\t{chrom}\t{pos}\t{svtype}\t{sl}\tSPLIT\t{mapq}\t{r.query_name}\t{mate}\n"); n += 1
             print(f"{sample} {hap}: {n} single-molecule leads")
             bam.close()
     out.close(); print("DONE_LEADPROV")

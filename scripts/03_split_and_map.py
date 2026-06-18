@@ -137,11 +137,14 @@ def classify(sample, hap, tis, meta, frag_bam, out):
             for svtype, svstart, arg in (ld.svtypes_starts_lens or []):
                 if svtype == "NOSV":
                     continue
-                svlen = "" if svtype == "BND" else arg
+                if svtype == "BND":
+                    svlen = ""; mate = f"{arg.mate_contig}:{arg.mate_ref_start}"
+                else:
+                    svlen = arg; mate = ""
                 a, b = CEN[hap][main_contig] if main_contig in CEN[hap] else (0, 0)
                 if a <= svstart < b:
                     mq = min(A.mapping_quality, B.mapping_quality)
-                    out.write(f"{sample}\t{hap}\t{tis}\t{main_contig}\t{svstart}\t{svtype}\t{svlen}\tSPLITMAP\t{mq}\t{qname}\n")
+                    out.write(f"{sample}\t{hap}\t{tis}\t{main_contig}\t{svstart}\t{svtype}\t{svlen}\tSPLITMAP\t{mq}\t{qname}\t{mate}\n")
                     n += 1
     print(f"{sample} {hap}: {n} split-and-map SV calls")
 
@@ -153,7 +156,7 @@ _DUMMY = _Dummy()
 
 def main():
     out = open(f"{OUT}/split_and_map.tsv", "w")
-    out.write("sample\thap\ttissue\tchrom\tpos\tsvtype\tsvlen\tsource\tmapq\tread\n")
+    out.write("sample\thap\ttissue\tchrom\tpos\tsvtype\tsvlen\tsource\tmapq\tread\tmate\n")
     for sample, tis in SAMPLES:
         for hap in HAPS:
             fa, meta = extract(sample, hap)

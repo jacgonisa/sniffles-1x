@@ -81,12 +81,12 @@ def main():
                 "pos": rep["pos"], "svtype": svtype, "svlen": rep["svlen"],
                 "methods": "+".join(methods),
                 "in_phase": int(ph) if rep["svlen"] else "", "monomer_rem": rem,
-                "mapq": rep["mapq"], "read": read,
+                "mapq": rep["mapq"], "read": read, "mate": rep.get("mate", ""),
                 "stock_match": int(stock_hit(stock, (sample, hap), rep["chrom"], rep["pos"], svtype)),
             })
 
     cols = ["sample", "hap", "tissue", "chrom", "pos", "svtype", "svlen",
-            "methods", "in_phase", "monomer_rem", "mapq", "read", "stock_match"]
+            "methods", "in_phase", "monomer_rem", "mapq", "read", "mate", "stock_match"]
     with open(f"{OUT}/sm_sv_calls.tsv", "w") as out:
         out.write("\t".join(cols) + "\n")
         for m in sorted(merged, key=lambda r: (r["sample"], r["hap"], r["chrom"], r["pos"])):

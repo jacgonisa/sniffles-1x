@@ -60,7 +60,8 @@ all_leads = sv.classify_splits(read, leads, config, contig)
 
 ➡️ **The full annotated Sniffles2 source of this function is reproduced in
 [`docs/sniffles_classify_splits.md`](docs/sniffles_classify_splits.md)** — each DEL/DUP/INV/INS/BND
-decision branch is highlighted there.
+decision branch is highlighted there. **How `pos`, `svlen` and the breakpoints are computed for each
+type (and how translocations/BND are detected) is in [`docs/coordinates.md`](docs/coordinates.md).**
 
 `sv.classify_splits` (sniffles 2.7.5, `sniffles/sv.py`) takes a read's primary + supplementary
 alignments as `Lead` objects (sorted by query position) and returns the SV type from strand +
