@@ -1,0 +1,6 @@
+# Single-molecule SV pipeline — Python deps (env: nextflow_env for most steps; base python for step 13 TRASH)
+sniffles==2.7.5      # imported for sv.classify_splits (topology); NOT modified
+pysam>=0.22
+numpy>=1.24
+matplotlib>=3.7
+# external tools (not pip): winnowmap, samtools, minimap2, TRASH-py
