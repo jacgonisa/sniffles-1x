@@ -178,16 +178,32 @@ def main():
         tisc = Counter(d["tissue"] for d in tl)
         ex = "".join(f"<tr><td>{d['tissue']}</td><td>{d['chrom']}:{d['pos']}</td><td>{d['mate']}</td>"
                      f"<td>{d['category']}</td><td>{d['methods']}</td></tr>" for d in tl[:12])
-        transloc = f"""<h2>11. Translocations (BND)</h2>
+        bg = {}
+        if os.path.exists(f"{OUT}/crossmap_background.tsv"):
+            for d in csv.DictReader(open(f"{OUT}/crossmap_background.tsv"), delimiter="\t"):
+                bg[d["tissue"]] = d
+        bgtxt = ""
+        if bg:
+            bgtxt = (f"<div class=box style='background:#FDEDEC;border-left:4px solid #C0392B'>"
+                     f"<b>Satellite cross-mapping noise background.</b> Inter-CEN BNDs are fragments demonstrably "
+                     f"landing in the <i>wrong</i> centromere (shared CEN178), so their rate is an empirical noise floor "
+                     f"for single-molecule satellite split calls: "
+                     f"<b>leaf {float(bg['leaf']['per_million_reads']):.0f}/million reads vs pollen "
+                     f"{float(bg['pollen']['per_million_reads']):.0f}/million</b> — ~"
+                     f"{float(bg['pollen']['per_million_reads'])/max(float(bg['leaf']['per_million_reads']),1):.0f}× higher "
+                     f"in pollen (shorter pollen reads → shorter, more ambiguous fragments). <b>Implication:</b> the pollen "
+                     f"enrichment in the <i>split-and-map</i> classes (DUP/INV/BND) is partly inflated by this elevated "
+                     f"background and should be read cautiously; the <i>CIGAR</i> DEL/INS signal (no re-mapping, register-checked) "
+                     f"is not affected by it. <code>results/crossmap_background.tsv</code>.</div>")
+        transloc = f"""<h2>11. Translocations (BND) &amp; the cross-mapping noise floor</h2>
 <p>A read whose two fragments map to <b>different contigs</b> is classified <b>BND</b> by
 <code>sv.classify_splits</code> — the inter-chromosomal / translocation class. <b>{len(tl)} BND calls</b>
 (leaf {tisc['leaf']}, pollen {tisc['pollen']}); the partner locus is in the <code>mate</code> column.
-By mate category: {', '.join(f'{k} {v}' for k, v in catc.items())}.
-<b>In these centromeres BND is the least reliable class</b>: all five centromeres share CEN178, so a fragment
-can mis-map to another CEN ({catc.get('other_CEN',0)}) or an unplaced/organellar contig
-({catc.get('unplaced_organellar',0)}) — both consistent with satellite cross-mapping, not true translocations.
-Mates on other-chromosome arms ({catc.get('other_chrom_arm',0)}) are possible real junctions but unconfirmable from a
-single read. Full list: <code>results/translocations.tsv</code>.</p>
+By mate category: {', '.join(f'{k} {v}' for k, v in catc.items())}. <b>{catc.get('other_CEN',0)} ({100*catc.get('other_CEN',0)//max(len(tl),1)}%)
+map to another centromere</b> — all five centromeres share CEN178, so these are overwhelmingly satellite cross-mapping, not
+real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar contigs. Mates on other-chromosome arms
+({catc.get('other_chrom_arm',0)}) are possible real junctions but unconfirmable from a single read.</p>
+{bgtxt}
 <table><tr><th>tissue</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
 
     import glob as _glob

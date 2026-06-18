@@ -46,6 +46,27 @@ def main():
     print("by category:", dict(Counter(d["category"] for d in out)))
     print("by tissue  :", dict(Counter(d["tissue"] for d in out)))
     print("by method  :", dict(Counter(d["methods"] for d in out)))
+
+    # inter-CEN BND = satellite cross-mapping noise background (per million CEN reads).
+    # These are fragments demonstrably landing in the WRONG centromere (shared CEN178),
+    # so their rate is an empirical noise floor for single-molecule satellite split calls.
+    denom = {}
+    try:
+        with open(f"{OUT}/cen_read_counts.tsv") as f:
+            next(f)
+            for ln in f:
+                s, h, nr = ln.split(); denom[(s, h)] = int(nr)
+    except FileNotFoundError:
+        denom = None
+    with open(f"{OUT}/crossmap_background.tsv", "w") as f:
+        f.write("tissue\tinterCEN_BND\tcen_reads\tper_million_reads\n")
+        print("--- satellite cross-mapping background (inter-CEN BND / million reads) ---")
+        for tis, samp in (("leaf", "wt_leaf"), ("pollen", "wt_pollen")):
+            n = sum(1 for d in out if d["tissue"] == tis and d["category"] == "other_CEN")
+            reads = sum(denom.get((samp, h), 0) for h in ("col", "ler")) if denom else 0
+            rate = n / reads * 1e6 if reads else 0
+            f.write(f"{tis}\t{n}\t{reads}\t{rate:.1f}\n")
+            print(f"  {tis}: {n} inter-CEN BND / {reads} reads = {rate:.1f} per million")
     print("DONE_TRANSLOC")
 
 
