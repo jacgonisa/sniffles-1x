@@ -164,6 +164,25 @@ def main():
         return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
                 f'<figcaption>{cap}</figcaption></figure>') if b else ""
 
+    def imv(name, cap):  # read-validation PNG (step 14)
+        b = file_b64(f"{OUT}/read_validation/{name}.png")
+        return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
+                f'<figcaption>{cap}</figcaption></figure>') if b else ""
+
+    import glob as _glob
+    valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))
+    val = ""
+    if valfigs:
+        items = "".join(imv(os.path.basename(p)[:-4],
+                            os.path.basename(p)[:-4].replace("_", " ")) for p in valfigs)
+        val = f"""<h2>10. Read-level validation (mapping · split · CEN178 register)</h2>
+<p>Per-read sanity plots so the calls can be eyeballed. Each shows the <b>reference</b> (with the SV interval and its CEN178
+monomer track), the <b>read</b> in query coordinates with every alignment fragment and the junction (for split-and-map events
+the split is <b>reproduced</b> — read cut at the contrast point and both halves re-mapped, so you see them land apart), and a
+<b>TRASH track on the read</b> coloured by monomer width. If the 178-bp monomers tile continuously through the red junction and
+the size is a whole number of monomers, the array is in-register. Files: <code>results/read_validation/</code>.</p>
+{items}"""
+
     fd = f"{OUT}/figures"
     comp = ""
     if os.path.exists(f"{fd}/size_per_million.png"):
@@ -302,6 +321,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {recur}
 {supp}
 {ann}
+{val}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""

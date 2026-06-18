@@ -28,6 +28,7 @@ python scripts/11_recurrence.py      # recurrent-locus VAF (hotspot vs fixed) ->
 python scripts/12_support_distribution.py  # read-support per locus + 1x events (all-reads & read-budget-matched)
 /home/jg2070/miniforge3/bin/python scripts/13_annotate_singletons.py  # TRASH on FULL read, flanking-monomer in-register + confidence (BASE python)
 python scripts/make_diagrams.py      # docs/ algorithm + topology diagrams (for the repo)
+/home/jg2070/miniforge3/bin/python scripts/14_read_validation.py  # per-read mapping/split + CEN178 register plots (BASE python)
 python scripts/09_pptx_figures.py    # genome maps (+orientation strip) + karyograms -> results/figures/
 python scripts/06_report.py          # -> report.html (run last; embeds 07-13 outputs)
 ```
