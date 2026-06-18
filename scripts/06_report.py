@@ -169,6 +169,27 @@ def main():
         return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
                 f'<figcaption>{cap}</figcaption></figure>') if b else ""
 
+    # translocations (BND) section (step 15)
+    transloc = ""
+    tp = f"{OUT}/translocations.tsv"
+    if os.path.exists(tp):
+        tl = list(csv.DictReader(open(tp), delimiter="\t"))
+        catc = Counter(d["category"] for d in tl)
+        tisc = Counter(d["tissue"] for d in tl)
+        ex = "".join(f"<tr><td>{d['tissue']}</td><td>{d['chrom']}:{d['pos']}</td><td>{d['mate']}</td>"
+                     f"<td>{d['category']}</td><td>{d['methods']}</td></tr>" for d in tl[:12])
+        transloc = f"""<h2>11. Translocations (BND)</h2>
+<p>A read whose two fragments map to <b>different contigs</b> is classified <b>BND</b> by
+<code>sv.classify_splits</code> — the inter-chromosomal / translocation class. <b>{len(tl)} BND calls</b>
+(leaf {tisc['leaf']}, pollen {tisc['pollen']}); the partner locus is in the <code>mate</code> column.
+By mate category: {', '.join(f'{k} {v}' for k, v in catc.items())}.
+<b>In these centromeres BND is the least reliable class</b>: all five centromeres share CEN178, so a fragment
+can mis-map to another CEN ({catc.get('other_CEN',0)}) or an unplaced/organellar contig
+({catc.get('unplaced_organellar',0)}) — both consistent with satellite cross-mapping, not true translocations.
+Mates on other-chromosome arms ({catc.get('other_chrom_arm',0)}) are possible real junctions but unconfirmable from a
+single read. Full list: <code>results/translocations.tsv</code>.</p>
+<table><tr><th>tissue</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
+
     import glob as _glob
     valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))
     val = ""
@@ -324,6 +345,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {supp}
 {ann}
 {val}
+{transloc}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""

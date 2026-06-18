@@ -21,6 +21,7 @@ python scripts/02_leadprov_sm.py     # cracked sniffles per-read -> results/lead
 python scripts/03_split_and_map.py   # MD-contrast split + remap -> results/split_and_map.tsv
 bash   scripts/04_sniffles_stock.sh  # stock sniffles --minsupport 1 -> results/stock/
 python scripts/05_merge_classify.py  # union+dedup+register+concord -> results/sm_sv_calls.tsv
+python scripts/15_translocations.py  # BND/translocation summary (mate column) -> results/translocations.tsv
 python scripts/07_normalize.py       # read-Mb normalization -> results/sm_sv_rates.tsv
 python scripts/08_read_qc.py         # read-quality controls (len/de/np/rq) -> results/read_qc.tsv
 python scripts/10_cen178_orient.py   # CEN178 array orientation (minimap2) -> results/cen178_orientation.tsv
