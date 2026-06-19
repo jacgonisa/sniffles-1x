@@ -259,9 +259,13 @@ repeats).</p>{armsm}
 read at the contrast frontier and re-mapped — not visible to stock Sniffles). in-register = whole-CEN178-monomer fraction
 (|svlen| mod 178 heuristic; the rigorous TRASH version is §9, singletons).</p>
 <table><tr><th>route</th><th>calls</th><th>in-register</th><th>DEL</th><th>INS</th><th>DUP</th><th>INV</th><th>BND</th></tr>{rws}</table>
-<div class=box>CIGAR (86.7%) and SPLITANDMAP (83.0%) are both highly in-register — and the split-and-map frontier fix
-(CUSUM change-point) lifted SPLITANDMAP from 60% to 83%, i.e. cutting at the true clean/noisy boundary makes the re-mapped
-fragments align at monomer boundaries. SPLITREAD is lower (many are large non-monomer junctions / BND).</div>"""
+<div class=box>CIGAR (86.7%) and SPLITANDMAP (83.0%) are both highly in-register. The split point in split-and-map is
+found by a <b>CUSUM change-point</b>: walk the read's per-base match/mismatch (0/1), keep a running sum of
+(value − mean mismatch rate) — it drifts up through noisy stretches and down through clean ones, so its extreme marks the
+clean↔noisy <b>frontier</b>, which is where we cut. This replaced an earlier global-contrast argmax that got pulled to a
+front-loaded noisy patch (e.g. cutting at 1.0 kb when the real boundary was 2.95 kb), and it lifted SPLITANDMAP in-register
+from ~60% to ~83% — cutting at the true boundary makes the re-mapped fragments align at monomer boundaries. SPLITREAD is
+lower (many are large non-monomer junctions / BND). See <code>ALGORITHM.md</code>.</div>"""
 
     import glob as _glob
     valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))

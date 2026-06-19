@@ -92,11 +92,22 @@ Sniffles' own logic, per read, no clustering.
 
 **(b) split-and-map** — `03_split_and_map.py` (a colleague's idea). Some reads map as one
 linear alignment whose second half is a run of mismatches (a satellite event aligned *out of
-phase*, so it never produced a clean split). We find the breakpoint as the read position of
-**maximal left/right substitution-rate contrast** (from the `MD` tag), cut the read there,
-re-map both halves independently with `winnowmap`, and call an SV when both fragments are ≥ 1 kb,
+phase*, so it never produced a clean split). We find the breakpoint, cut the read there, re-map
+both halves independently with `winnowmap`, and call an SV when both fragments are ≥ 1 kb,
 MAPQ ≥ 10, and the reference gap ≥ 50 bp. Topology is decided by the **same**
 `sv.classify_splits` run on the two remapped fragments — so both detectors share one classifier.
+
+*Finding the breakpoint — CUSUM change-point (`best_split`).* From the `MD` tag we get a 0/1
+match/mismatch value at every aligned read position. We want the position where the read flips
+from low-mismatch (mapping cleanly to ref A) to high-mismatch (the part that belongs elsewhere).
+We compute the read's mean mismatch rate and keep a running **cumulative sum of (value − mean)**:
+it drifts down through clean stretches and up through noisy ones, so its extreme (`argmax` of the
+absolute cumulative sum) is exactly the high↔low **frontier** — the cut point. We keep it only if
+the actual left-vs-right mismatch-rate gap there is ≥ 0.01, and both sides are ≥ 1 kb.
+(An earlier version maximized the *global* left/right contrast instead; that gets pulled toward a
+front-loaded noisy patch rather than the true boundary — e.g. on one read it cut at 1.0 kb while
+the clean/noisy frontier was at 2.95 kb. Switching to CUSUM fixed this and raised the SPLITANDMAP
+in-register fraction from ~60% to ~83%.)
 
 Detectors are unioned and de-duplicated per read in `05_merge_classify.py`.
 
