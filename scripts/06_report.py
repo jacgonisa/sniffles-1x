@@ -127,6 +127,25 @@ def fig_methods(rows):
     return png(fig)
 
 
+def fig_routes(path):
+    """How many reads each detection route recovered (from source_breakdown.tsv)."""
+    if not os.path.exists(path):
+        return ""
+    rws = list(csv.DictReader(open(path), delimiter="\t"))
+    calls = [int(r["calls"]) for r in rws]
+    fig, ax = plt.subplots(figsize=(7.6, 3.4))
+    y = range(len(rws))
+    ax.barh(list(y), calls, color=["#2980B9", "#E67E22", "#27AE60", "#8E44AD"][:len(rws)])
+    for i, r in enumerate(rws):
+        ax.text(int(r["calls"]), i, f"  {r['calls']}  ({float(r['pct_in_register']):.0f}% in-register)",
+                va="center", fontsize=9)
+    ax.set_yticks(list(y)); ax.set_yticklabels([r["methods"] for r in rws], fontsize=9)
+    ax.set_xlabel("single-molecule SV calls"); ax.invert_yaxis()
+    ax.set_xlim(0, max(calls) * 1.45)
+    ax.set_title("Reads recovered per detection route (CIGAR vs split-and-map vs split-read)")
+    return png(fig)
+
+
 def main():
     rows = load()
     n = len(rows)
@@ -138,6 +157,25 @@ def main():
     qc = load_qc()
     f1, fr, f2, f3 = fig_counts(rows), fig_rates(rates), fig_sizes(rows), fig_methods(rows)
     fq = fig_qc(qc) if qc else ""
+
+    # dataset-at-a-glance (Arabidopsis / this run)
+    cenreads = {}
+    if os.path.exists(f"{OUT}/cen_read_counts.tsv"):
+        for r in csv.DictReader(open(f"{OUT}/cen_read_counts.tsv"), delimiter="\t"):
+            cenreads[(r["sample"].replace("wt_", ""), r["hap"])] = int(r["cen_reads"])
+    cand = {}
+    for p in sorted(__import__("glob").glob(f"{OUT}/candidates/*.tsv")):
+        key = os.path.basename(p)[:-4].replace("wt_", "")  # e.g. leaf_col
+        cand[tuple(key.split("_"))] = sum(1 for _ in open(p)) - 1
+    calls_th = Counter((r["tissue"], r["hap"]) for r in rows)
+    glance = ("<table><tr><th>tissue</th><th>haplotype</th><th>CEN reads</th>"
+              "<th>candidate reads (de≥0.005 ∨ NM≥50 ∨ SA)</th><th>SV calls</th></tr>"
+              + "".join(
+                  f"<tr><td>{t}</td><td>{h}</td><td>{cenreads.get((t, h), 0):,}</td>"
+                  f"<td>{cand.get((t, h), 0):,}</td><td>{calls_th[(t, h)]:,}</td></tr>"
+                  for t in ("leaf", "pollen") for h in ("col", "ler"))
+              + f"<tr><td colspan=2><b>total</b></td><td><b>{sum(cenreads.values()):,}</b></td>"
+              f"<td><b>{sum(cand.values()):,}</b></td><td><b>{n:,}</b></td></tr></table>")
 
     qc_tbl = ("<table><tr><th>tissue</th><th>hap</th><th>CEN read len (kb, median)</th>"
               "<th>arm de% (≈ error)</th><th>CEN de%</th><th>np (median passes)</th><th>rq% (median)</th></tr>"
@@ -253,11 +291,13 @@ repeats).</p>{armsm}
             f"<tr><td>{label.get(d['methods'], d['methods'])}</td><td>{d['calls']}</td>"
             f"<td>{d['pct_in_register']}% ({d['in_register']})</td><td>{d['DEL']}</td><td>{d['INS']}</td>"
             f"<td>{d['DUP']}</td><td>{d['INV']}</td><td>{d['BND']}</td></tr>" for d in sbl)
+        route_fig = fig_routes(sb)
         srcbreak = f"""<h2>13. Where the calls come from (detection route) &amp; in-register by route</h2>
 <p>Each call is found by one or more routes: <b>CIGAR</b> (inline I/D in a single alignment), <b>SPLITREAD</b>
 (the aligner already split the read via its <code>SA</code> tag — Sniffles-compatible), <b>SPLITANDMAP</b> (we split the
 read at the contrast frontier and re-mapped — not visible to stock Sniffles). in-register = whole-CEN178-monomer fraction
 (|svlen| mod 178 heuristic; the rigorous TRASH version is §9, singletons).</p>
+{im(route_fig, 'Reads recovered per route. CIGAR (inline indel) finds the most and is the most in-register; split-and-map adds ~2000 events invisible to stock Sniffles; split-read is the aligner’s own SA splits.') if route_fig else ''}
 <table><tr><th>route</th><th>calls</th><th>in-register</th><th>DEL</th><th>INS</th><th>DUP</th><th>INV</th><th>BND</th></tr>{rws}</table>
 <div class=box>CIGAR (86.7%) and SPLITANDMAP (83.0%) are both highly in-register. The split point in split-and-map is
 found by a <b>CUSUM change-point</b>: walk the read's per-base match/mismatch (0/1), keep a running sum of
@@ -268,9 +308,40 @@ from ~60% to ~83% — cutting at the true boundary makes the re-mapped fragments
 lower (many are large non-monomer junctions / BND). See <code>ALGORITHM.md</code>.</div>"""
 
     import glob as _glob
+    CATLAB = {
+        "01_inregister_DEL": "In-register DEL — whole-CEN178-monomer deletion (unequal-sister-chromatid-HR signature)",
+        "02_outofregister_DEL": "Out-of-register DEL — junction not on a monomer boundary (NHEJ-like)",
+        "03_inregister_INS": "In-register INS — whole-monomer insertion",
+        "04_splitread_DEL": "Split-read DEL — the aligner already split the read (its own SA tag)",
+        "05_splitandmap_DUP": "Split-and-map DUP — read cut at the CUSUM frontier and re-mapped; the two halves land apart",
+        "06_splitandmap_INV": "Split-and-map INV — second fragment re-maps in the opposite orientation",
+    }
+    gallery = sorted(_glob.glob(f"{OUT}/validation_gallery/*.png"))
     valfigs = sorted(_glob.glob(f"{OUT}/read_validation/*.png"))
     val = ""
-    if valfigs:
+    if gallery:
+        def gimg(p):
+            b = file_b64(p)
+            rid = os.path.basename(p)[:-4].split("__", 1)[-1]
+            return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
+                    f'<figcaption>{rid.replace("_", " ")}</figcaption></figure>') if b else ""
+        blocks = ""
+        cur = None
+        for p in gallery:
+            cat = os.path.basename(p).split("__", 1)[0]
+            if cat != cur:
+                blocks += f"<h3>{CATLAB.get(cat, cat)}</h3>"
+                cur = cat
+            blocks += gimg(p)
+        val = f"""<h2>10. Read-level validation — test cases, one figure per read</h2>
+<p>Worked examples so the calls can be eyeballed, grouped by category. <b>Each panel is one read.</b> It shows the
+<b>reference</b> (SV interval + its CEN178 monomer track), the <b>read</b> in query coordinates with every alignment
+fragment and the junction (for split-and-map events the split is <b>reproduced</b> — the read is cut at the CUSUM contrast
+point and both halves re-mapped, so you see them land apart), and a <b>TRASH CEN178 track on the read</b> coloured by
+monomer width. If the 178-bp monomers tile continuously through the red junction and the size is a whole number of monomers,
+the array is in-register. Files: <code>results/validation_gallery/</code>.</p>
+{blocks}"""
+    elif valfigs:
         items = "".join(imv(os.path.basename(p)[:-4],
                             os.path.basename(p)[:-4].replace("_", " ")) for p in valfigs)
         val = f"""<h2>10. Read-level validation (mapping · split · CEN178 register)</h2>
@@ -395,6 +466,12 @@ Stock Sniffles2 (<code>--minsupport 1 --mosaic</code>) is shown as a concordance
 By type: {', '.join(f'{t} {by_type[t]}' for t in TYPES if by_type[t])}.
 Stock-Sniffles concordant: {stock}/{n} ({100*stock/max(n,1):.1f}%).
 {('CEN178 in-register (whole-monomer indels): %d/%d (%.1f%%).' % (sum(inph), len(inph), 100*sum(inph)/max(len(inph),1))) if inph else ''}</div>
+<h2>0. Dataset at a glance</h2>
+<p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi. Reads are haplotype-split and mapped to each parental
+assembly (Col-HiFi, Ler-HiFi). The centromere windows total ≈11.5 Mb per assembly across the 5 chromosomes (CEN178 satellite,
+178-bp monomer). Only reads anchored in those windows are analysed. "Candidate reads" pass the divergence/split gate; each SV
+call below comes from one read.</p>
+{glance}
 <h2>1. Calls by type, tissue, haplotype (raw counts)</h2>{im(f1, 'Raw single-molecule SV counts. Leaf is ~500× / pollen ~30×, so leaf yields more events purely from depth — NOT comparable. See §2.')}
 <h2>2. Read-Mb-normalized rate (leaf vs pollen comparable)</h2>
 <p>Normalized by Mb of mapped read sequence inside the centromere (sum of aligned bp overlapping the CEN window per primary read).
