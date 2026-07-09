@@ -1,6 +1,5 @@
-# This repo is code + docs only — results are regenerated from data.
+# Large intermediate results are regenerated from data.
 results/
-report.html
 figures_pptx.html
 # the colleague's source deck (not ours to redistribute)
 20260617_SV_analysis.pptx
