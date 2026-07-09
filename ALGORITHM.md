@@ -109,6 +109,18 @@ front-loaded noisy patch rather than the true boundary — e.g. on one read it c
 the clean/noisy frontier was at 2.95 kb. Switching to CUSUM fixed this and raised the SPLITANDMAP
 in-register fraction from ~60% to ~83%.)
 
+**The MD-tag split on a real read** (wt_leaf/col, Chr1 centromere, called a DUP). *Top:* the per-base
+mismatch rate along the read — the first ~2.9 kb is a run of ~6% mismatches (an out-of-phase satellite
+chunk that belongs to a different monomer copy), after which the read maps essentially perfectly.
+*Bottom:* the CUSUM of `(mismatch − mean)`; it climbs through the noisy stretch and falls through the
+clean one, and its `argmax` lands exactly on the frontier — so we cut at **2.95 kb** and re-map the two
+halves independently. (The dashed line is the cut in both panels; this is the read where the old
+global-contrast method mis-cut at 1.0 kb.)
+
+![MD-tag CUSUM split](docs/md_split.png)
+
+Regenerate with `python scripts/19_md_split_figure.py`.
+
 Detectors are unioned and de-duplicated per read in `05_merge_classify.py`.
 
 ## 4. Candidate read selection (the input gate)
