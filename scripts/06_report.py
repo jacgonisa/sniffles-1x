@@ -6,11 +6,16 @@ from collections import defaultdict, Counter
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from common import OUT, MONO
+from common import OUT, MONO, GROUPS, genotype
 
 REPORT = "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/report.html"
 TYPES = ["DEL", "INS", "DUP", "INV", "BND"]
 COL = {"DEL": "#C0392B", "INS": "#2980B9", "DUP": "#27AE60", "INV": "#8E44AD", "BND": "#E67E22"}
+# the 4 genotype×tissue groups (haplotypes pooled); label + colour
+GLAB = {"wt_leaf": "WT leaf", "cenh3ox_leaf": "CENH3ox leaf",
+        "wt_pollen": "WT pollen", "cenh3ox_pollen": "CENH3ox pollen"}
+GCOL = {"wt_leaf": "#4C9A2A", "cenh3ox_leaf": "#1B5E20",
+        "wt_pollen": "#E8820C", "cenh3ox_pollen": "#B34700"}
 
 
 def load():
@@ -35,17 +40,17 @@ def file_b64(path):
 
 
 def fig_counts(rows):
-    cats = [(t, h) for t in ("leaf", "pollen") for h in ("col", "ler")]
+    """raw calls per group (haps pooled), grouped by SV type."""
     cnt = defaultdict(Counter)
     for r in rows:
-        cnt[(r["tissue"], r["hap"])][r["svtype"]] += 1
-    fig, ax = plt.subplots(figsize=(8, 4.2))
-    x = range(len(cats)); w = 0.16
+        cnt[r["sample"]][r["svtype"]] += 1
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    x = range(len(GROUPS)); w = 0.16
     for i, t in enumerate(TYPES):
-        ax.bar([xi + i * w for xi in x], [cnt[c][t] for c in cats], w, label=t, color=COL[t])
-    ax.set_xticks([xi + 2 * w for xi in x]); ax.set_xticklabels([f"{t}\n{h}" for t, h in cats])
+        ax.bar([xi + i * w for xi in x], [cnt[g][t] for g in GROUPS], w, label=t, color=COL[t])
+    ax.set_xticks([xi + 2 * w for xi in x]); ax.set_xticklabels([GLAB[g] for g in GROUPS])
     ax.set_ylabel("single-molecule SV calls"); ax.legend(ncol=5, fontsize=8)
-    ax.set_title("Single-molecule centromere SVs by type, tissue, haplotype")
+    ax.set_title("Single-molecule centromere SVs by type — WT vs CENH3ox (raw; haps pooled)")
     return png(fig)
 
 
@@ -60,17 +65,25 @@ def load_rates():
     return rows
 
 
+def group_rates(rates):
+    """pool haplotypes: per group, calls/Mb per type = Σ(per_mb·Mb)/ΣMb."""
+    mb = defaultdict(float); cnt = defaultdict(lambda: defaultdict(float))
+    for r in rates:
+        g = r["sample"]; m = float(r["cen_mapped_mb"]); mb[g] += m
+        for t in TYPES:
+            cnt[g][t] += float(r.get(f"{t}_per_mb", 0) or 0) * m
+    return {g: {t: (cnt[g][t] / mb[g] if mb[g] else 0) for t in TYPES} for g in GROUPS}, mb
+
+
 def fig_rates(rates):
-    cats = [(t, h) for t in ("leaf", "pollen") for h in ("col", "ler")]
-    rt = {(r["tissue"], r["hap"]): r for r in rates}
-    fig, ax = plt.subplots(figsize=(8, 4.2))
-    x = range(len(cats)); w = 0.16
+    gr, mb = group_rates(rates)
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    x = range(len(GROUPS)); w = 0.16
     for i, t in enumerate(TYPES):
-        ax.bar([xi + i * w for xi in x],
-               [float(rt[c][f"{t}_per_mb"]) if c in rt else 0 for c in cats], w, label=t, color=COL[t])
-    ax.set_xticks([xi + 2 * w for xi in x]); ax.set_xticklabels([f"{t}\n{h}" for t, h in cats])
+        ax.bar([xi + i * w for xi in x], [gr[g][t] for g in GROUPS], w, label=t, color=COL[t])
+    ax.set_xticks([xi + 2 * w for xi in x]); ax.set_xticklabels([GLAB[g] for g in GROUPS])
     ax.set_ylabel("calls per Mb of CEN-mapped read seq"); ax.legend(ncol=5, fontsize=8)
-    ax.set_title("Read-Mb-normalized single-molecule SV rate (leaf vs pollen comparable)")
+    ax.set_title("Read-Mb-normalized single-molecule SV rate — WT vs CENH3ox (haps pooled)")
     return png(fig)
 
 
@@ -83,11 +96,11 @@ def load_qc():
 
 
 def fig_qc(qc):
-    cats = [(r["tissue"], r["hap"]) for r in qc]
-    labels = [f"{t}\n{h}" for t, h in cats]
-    fig, axes = plt.subplots(1, 3, figsize=(11, 3.6))
+    qc = sorted(qc, key=lambda r: (GROUPS.index(r["sample"]) if r["sample"] in GROUPS else 9, r["hap"]))
+    labels = [f"{GLAB.get(r['sample'], r['sample'])}\n{r['hap']}" for r in qc]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.8))
     x = range(len(qc))
-    cols = ["#C0392B" if r["tissue"] == "pollen" else "#2980B9" for r in qc]
+    cols = [GCOL.get(r["sample"], "#888") for r in qc]
     axes[0].bar(x, [float(r["arm_de_pct"]) for r in qc], color=cols)
     axes[0].set_title("Arm de% (≈ seq error)"); axes[0].set_ylabel("% divergence")
     axes[1].bar(x, [float(r["np_med"]) for r in qc], color=cols)
@@ -95,21 +108,21 @@ def fig_qc(qc):
     axes[2].bar(x, [float(r["cen_med_kb"]) for r in qc], color=cols)
     axes[2].set_title("CEN read length (median kb)")
     for ax in axes:
-        ax.set_xticks(list(x)); ax.set_xticklabels(labels, fontsize=8)
-    fig.suptitle("Read-quality controls — pollen (red) is equal-or-better than leaf (blue)")
+        ax.set_xticks(list(x)); ax.set_xticklabels(labels, fontsize=7, rotation=30, ha="right")
+    fig.suptitle("Read-quality controls per group (WT vs CENH3ox, leaf & pollen)")
     return png(fig)
 
 
 def fig_sizes(rows):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True, sharey=True)
-    for ax, tis in zip(axes, ("leaf", "pollen")):
+    fig, axes = plt.subplots(1, 4, figsize=(16, 3.8), sharex=True, sharey=True)
+    for ax, g in zip(axes, GROUPS):
         for t in ("DEL", "INS", "DUP"):
-            sizes = [abs(r["svlen"]) for r in rows if r["tissue"] == tis and r["svtype"] == t and r["svlen"]]
+            sizes = [abs(r["svlen"]) for r in rows if r["sample"] == g and r["svtype"] == t and r["svlen"]]
             if sizes:
-                ax.hist(sizes, bins=range(0, 3000, 50), histtype="step", color=COL[t], label=t, linewidth=1.4)
+                ax.hist(sizes, bins=range(0, 3000, 50), histtype="step", color=COL[t], label=t, linewidth=1.3)
         for m in range(MONO, 3000, MONO):
             ax.axvline(m, color="#bbb", ls=":", lw=0.6)
-        ax.set_title(tis); ax.set_xlabel("|SV length| (bp)"); ax.set_xlim(0, 3000); ax.legend(fontsize=8)
+        ax.set_title(GLAB[g], fontsize=10); ax.set_xlabel("|SV length| (bp)"); ax.set_xlim(0, 3000); ax.legend(fontsize=7)
     axes[0].set_ylabel("count")
     fig.suptitle("Size distribution (dotted = CEN178 178-bp monomer multiples)")
     return png(fig)
@@ -149,50 +162,64 @@ def fig_routes(path):
 def main():
     rows = load()
     n = len(rows)
-    by_tis = Counter(r["tissue"] for r in rows)
+    by_grp = Counter(r["sample"] for r in rows)
     by_type = Counter(r["svtype"] for r in rows)
     stock = sum(int(r["stock_match"]) for r in rows)
     inph = [int(r["in_phase"]) for r in rows if r["in_phase"] not in ("", "None")]
     rates = load_rates()
     qc = load_qc()
+    gr, gmb = group_rates(rates)           # per-group per-type calls/Mb, and Mb per group
+    grate = {g: sum(gr[g].values()) for g in GROUPS}   # ALL calls/Mb per group
     f1, fr, f2, f3 = fig_counts(rows), fig_rates(rates), fig_sizes(rows), fig_methods(rows)
     fq = fig_qc(qc) if qc else ""
 
-    # dataset-at-a-glance (Arabidopsis / this run)
+    # dataset-at-a-glance (Arabidopsis / this run) — per group (genotype×tissue) × haplotype
     cenreads = {}
     if os.path.exists(f"{OUT}/cen_read_counts.tsv"):
         for r in csv.DictReader(open(f"{OUT}/cen_read_counts.tsv"), delimiter="\t"):
-            cenreads[(r["sample"].replace("wt_", ""), r["hap"])] = int(r["cen_reads"])
+            cenreads[(r["sample"], r["hap"])] = int(r["cen_reads"])
     cand = {}
     for p in sorted(__import__("glob").glob(f"{OUT}/candidates/*.tsv")):
-        key = os.path.basename(p)[:-4].replace("wt_", "")  # e.g. leaf_col
-        cand[tuple(key.split("_"))] = sum(1 for _ in open(p)) - 1
-    calls_th = Counter((r["tissue"], r["hap"]) for r in rows)
-    glance = ("<table><tr><th>tissue</th><th>haplotype</th><th>CEN reads</th>"
+        b = os.path.basename(p)[:-4]              # e.g. cenh3ox_leaf_col
+        s, h = b.rsplit("_", 1); cand[(s, h)] = sum(1 for _ in open(p)) - 1
+    calls_sh = Counter((r["sample"], r["hap"]) for r in rows)
+    glance = ("<table><tr><th>genotype</th><th>tissue</th><th>hap</th><th>CEN reads</th>"
               "<th>candidate reads (de≥0.005 ∨ NM≥50 ∨ SA)</th><th>SV calls</th></tr>"
               + "".join(
-                  f"<tr><td>{t}</td><td>{h}</td><td>{cenreads.get((t, h), 0):,}</td>"
-                  f"<td>{cand.get((t, h), 0):,}</td><td>{calls_th[(t, h)]:,}</td></tr>"
-                  for t in ("leaf", "pollen") for h in ("col", "ler"))
-              + f"<tr><td colspan=2><b>total</b></td><td><b>{sum(cenreads.values()):,}</b></td>"
+                  f"<tr><td>{genotype(g)}</td><td>{'leaf' if 'leaf' in g else 'pollen'}</td><td>{h}</td>"
+                  f"<td>{cenreads.get((g, h), 0):,}</td>"
+                  f"<td>{cand.get((g, h), 0):,}</td><td>{calls_sh[(g, h)]:,}</td></tr>"
+                  for g in GROUPS for h in ("col", "ler"))
+              + f"<tr><td colspan=3><b>total</b></td><td><b>{sum(cenreads.values()):,}</b></td>"
               f"<td><b>{sum(cand.values()):,}</b></td><td><b>{n:,}</b></td></tr></table>")
 
-    qc_tbl = ("<table><tr><th>tissue</th><th>hap</th><th>CEN read len (kb, median)</th>"
+    qc = sorted(qc, key=lambda r: (GROUPS.index(r["sample"]) if r["sample"] in GROUPS else 9, r["hap"]))
+    qc_tbl = ("<table><tr><th>group</th><th>hap</th><th>CEN read len (kb, median)</th>"
               "<th>arm de% (≈ error)</th><th>CEN de%</th><th>np (median passes)</th><th>rq% (median)</th></tr>"
               + "".join(
-                  f"<tr><td>{r['tissue']}</td><td>{r['hap']}</td><td>{float(r['cen_med_kb']):.1f}</td>"
+                  f"<tr><td>{GLAB.get(r['sample'], r['sample'])}</td><td>{r['hap']}</td><td>{float(r['cen_med_kb']):.1f}</td>"
                   f"<td>{float(r['arm_de_pct']):.3f}</td><td>{float(r['cen_de_pct']):.3f}</td>"
                   f"<td>{float(r['np_med']):.0f}</td><td>{float(r['rq_med_pct']):.3f}</td></tr>"
                   for r in qc) + "</table>") if qc else ""
 
-    rate_tbl = ("<table><tr><th>tissue</th><th>hap</th><th>CEN-mapped Mb</th>"
-                "<th>ALL / Mb</th><th>DEL / Mb</th><th>INS / Mb</th><th>DUP / Mb</th></tr>"
+    rate_tbl = ("<table><tr><th>group</th><th>CEN-mapped Mb</th>"
+                "<th>ALL / Mb</th><th>DEL / Mb</th><th>INS / Mb</th><th>DUP / Mb</th><th>INV / Mb</th><th>BND / Mb</th></tr>"
                 + "".join(
-                    f"<tr><td>{r['tissue']}</td><td>{r['hap']}</td><td>{float(r['cen_mapped_mb']):.0f}</td>"
-                    f"<td>{float(r['ALL_per_mb']):.3f}</td><td>{float(r['DEL_per_mb']):.3f}</td>"
-                    f"<td>{float(r['INS_per_mb']):.3f}</td><td>{float(r['DUP_per_mb']):.3f}</td></tr>"
-                    for r in sorted(rates, key=lambda r: (r['tissue'], r['hap'])))
+                    f"<tr><td><b>{GLAB[g]}</b></td><td>{gmb[g]:.0f}</td><td><b>{grate[g]:.3f}</b></td>"
+                    f"<td>{gr[g]['DEL']:.3f}</td><td>{gr[g]['INS']:.3f}</td><td>{gr[g]['DUP']:.3f}</td>"
+                    f"<td>{gr[g]['INV']:.3f}</td><td>{gr[g]['BND']:.3f}</td></tr>" for g in GROUPS)
                 + "</table>")
+
+    # per-group QC medians (haps averaged) for the §3 text
+    qcg = {}
+    for g in GROUPS:
+        gr_rows = [r for r in qc if r["sample"] == g]
+        if gr_rows:
+            qcg[g] = {k: sum(float(r[k]) for r in gr_rows) / len(gr_rows)
+                      for k in ("cen_med_kb", "arm_de_pct", "np_med", "rq_med_pct")}
+
+    def qcmp(metric):  # "wt_leaf X vs CENH3ox Y" style helper
+        return {g: qcg.get(g, {}).get(metric, 0) for g in GROUPS}
 
     def im(b, cap):
         return f'<figure><img src="data:image/png;base64,{b}"><figcaption>{cap}</figcaption></figure>'
@@ -213,38 +240,36 @@ def main():
     if os.path.exists(tp):
         tl = list(csv.DictReader(open(tp), delimiter="\t"))
         catc = Counter(d["category"] for d in tl)
-        tisc = Counter(d["tissue"] for d in tl)
-        ex = "".join(f"<tr><td>{d['tissue']}</td><td>{d['chrom']}:{d['pos']}</td><td>{d['mate']}</td>"
+        grpc = Counter(d["sample"] for d in tl)
+        ex = "".join(f"<tr><td>{GLAB.get(d['sample'], d['sample'])}</td><td>{d['chrom']}:{d['pos']}</td><td>{d['mate']}</td>"
                      f"<td>{d['category']}</td><td>{d['methods']}</td></tr>" for d in tl[:12])
         bg = {}
         if os.path.exists(f"{OUT}/crossmap_background.tsv"):
             for d in csv.DictReader(open(f"{OUT}/crossmap_background.tsv"), delimiter="\t"):
-                bg[d["tissue"]] = d
+                bg[d["group"]] = d
         bgtxt = ""
         if bg:
+            bgrows = "".join(
+                f"<tr><td>{GLAB.get(g, g)}</td><td>{bg[g]['interCEN_BND']}</td><td>{int(bg[g]['cen_reads']):,}</td>"
+                f"<td><b>{float(bg[g]['per_million_reads']):.0f}</b></td></tr>" for g in GROUPS if g in bg)
             bgtxt = (f"<div class=box style='background:#FDEDEC;border-left:4px solid #C0392B'>"
                      f"<b>Satellite cross-mapping noise background.</b> Inter-CEN BNDs are fragments demonstrably "
-                     f"landing in the <i>wrong</i> centromere (shared CEN178), so their rate is an empirical noise floor "
-                     f"for single-molecule satellite split calls: "
-                     f"<b>leaf {float(bg['leaf']['per_million_reads']):.0f}/million reads vs pollen "
-                     f"{float(bg['pollen']['per_million_reads']):.0f}/million</b> — ~"
-                     f"{float(bg['pollen']['per_million_reads'])/max(float(bg['leaf']['per_million_reads']),1):.0f}× higher "
-                     f"in pollen. Per split-and-map <i>attempt</i>, pollen cross-maps ~3.4× more often than leaf "
-                     f"(≈59% vs ≈17% of split calls become inter-CEN BND), consistent with its shorter re-mapped fragments "
-                     f"(median ≈6.8 kb vs ≈9.5 kb) — though genuinely more inter-CEN rearrangement in pollen cannot be "
-                     f"excluded from single reads. <b>Implication:</b> the pollen enrichment in the <i>split-and-map</i> classes "
-                     f"(DUP/INV/BND) is partly inflated by this background and should be read cautiously; the <i>CIGAR</i> "
-                     f"DEL/INS signal (no re-mapping, register-checked) is not affected. <code>results/crossmap_background.tsv</code>.</div>")
+                     f"landing in the <i>wrong</i> centromere (shared CEN178), so their per-million-read rate is an empirical "
+                     f"noise floor for single-molecule satellite split calls. It is much higher in pollen than leaf (shorter "
+                     f"reads → more ambiguous fragments), so the split-and-map classes (DUP/INV/BND) should be read cautiously; "
+                     f"the CIGAR DEL/INS signal (no re-mapping, register-checked) is unaffected. This floor is a property of the "
+                     f"satellite, so it lets us compare WT vs CENH3ox on equal footing."
+                     f"<table><tr><th>group</th><th>inter-CEN BND</th><th>CEN reads</th><th>/ million reads</th></tr>{bgrows}</table></div>")
         transloc = f"""<h2>11. Translocations (BND) &amp; the cross-mapping noise floor</h2>
 <p>A read whose two fragments map to <b>different contigs</b> is classified <b>BND</b> by
 <code>sv.classify_splits</code> — the inter-chromosomal / translocation class. <b>{len(tl)} BND calls</b>
-(leaf {tisc['leaf']}, pollen {tisc['pollen']}); the partner locus is in the <code>mate</code> column.
+({', '.join(f'{GLAB[g]} {grpc[g]}' for g in GROUPS if grpc[g])}); the partner locus is in the <code>mate</code> column.
 By mate category: {', '.join(f'{k} {v}' for k, v in catc.items())}. <b>{catc.get('other_CEN',0)} ({100*catc.get('other_CEN',0)//max(len(tl),1)}%)
 map to another centromere</b> — all five centromeres share CEN178, so these are overwhelmingly satellite cross-mapping, not
 real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar contigs. Mates on other-chromosome arms
 ({catc.get('other_chrom_arm',0)}) are possible real junctions but unconfirmable from a single read.</p>
 {bgtxt}
-<table><tr><th>tissue</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
+<table><tr><th>group</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
 
     # CEN vs ARM control (step 16)
     armc = ""
@@ -252,17 +277,17 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
     if os.path.exists(ap2):
         al2 = list(csv.DictReader(open(ap2), delimiter="\t"))
         trow = "".join(
-            f"<tr><td>{d['tissue']}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
+            f"<tr><td>{GLAB.get(d['group'], d['group'])}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
             f"<td>{d['arm_per_Mreads']}</td><td><b>{d['enrichment_CEN_over_ARM']}×</b></td></tr>" for d in al2)
         armsm = ""
         sp = f"{OUT}/arm_splitmap_control.tsv"
         if os.path.exists(sp):
             sl = list(csv.DictReader(open(sp), delimiter="\t"))
             srow = "".join(
-                f"<tr><td>{d['tissue']}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
+                f"<tr><td>{GLAB.get(d['group'], d['group'])}</td><td>{d['svtype']}</td><td>{d['cen_per_Mreads']}</td>"
                 f"<td>{d['arm_per_Mreads']}</td><td><b>{d['enrichment_CEN_over_ARM']}×</b></td></tr>" for d in sl)
             armsm = f"""<h3>12b. Same control on the split-and-map route</h3>
-<table><tr><th>tissue</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{srow}</table>
+<table><tr><th>group</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{srow}</table>
 <div class=box style="background:#FDEDEC;border-left:4px solid #C0392B"><b>Reading the split-and-map route:</b>
 <b>DEL is robustly real</b> (~55× CEN, and it still occurs in unique arm sequence). <b>BND in the arm is zero</b> —
 unique sequence cannot cross-map, confirming split-and-map BND in the CEN is satellite cross-mapping. <b>DUP/INV are
@@ -273,11 +298,11 @@ satellite-exclusive by construction and remain confounded between true CEN rearr
 <p>The same per-read leadprov detection (CIGAR + native split) run on reads anchored in the chromosome <b>arms</b>
 (unique sequence) — windows starting <b>5 Mb past the centromere</b> so the CEN↔ARM transition/pericentromere is excluded.
 Arms are the no-satellite background. The CEN÷ARM ratio is the centromere-specific enrichment:</p>
-<table><tr><th>tissue</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{trow}</table>
-<div class=box><b>Reading the leadprov route:</b> <b>DEL/INS/DUP are genuinely centromere-specific</b> (≈8–14× for DEL/INS, DUP
-~74× in leaf) — real centromere instability. <b>BND is NOT enriched (ratio ≈ 1.0)</b> — same rate in arm and CEN, i.e. a
-uniform background (justifies treating native-split BND as noise). leadprov INV is not CEN-enriched (arms carry inverted
-repeats).</p>{armsm}
+<table><tr><th>group</th><th>type</th><th>CEN /M reads</th><th>ARM /M reads</th><th>CEN ÷ ARM</th></tr>{trow}</table>
+<div class=box><b>Reading the leadprov route:</b> <b>DEL/INS/DUP are genuinely centromere-specific</b> (several-fold CEN÷ARM in
+every group) — real centromere instability, in both WT and CENH3ox. <b>BND is NOT enriched (ratio ≈ 1.0)</b> — same rate in
+arm and CEN, a uniform background (justifies treating native-split BND as noise). leadprov INV is not CEN-enriched (arms carry
+inverted repeats).</p>{armsm}
 <p class=cap style="font-size:12.5px;color:#666"><code>results/arm_control.tsv</code> · <code>results/arm_splitmap_control.tsv</code></p>"""
 
     # SV source breakdown (step 17)
@@ -292,6 +317,20 @@ repeats).</p>{armsm}
             f"<td>{d['pct_in_register']}% ({d['in_register']})</td><td>{d['DEL']}</td><td>{d['INS']}</td>"
             f"<td>{d['DUP']}</td><td>{d['INV']}</td><td>{d['BND']}</td></tr>" for d in sbl)
         route_fig = fig_routes(sb)
+        # per-group route breakdown (WT vs CENH3ox)
+        grp_route_tbl = ""
+        gbp = f"{OUT}/source_breakdown_by_group.tsv"
+        if os.path.exists(gbp):
+            gbl = list(csv.DictReader(open(gbp), delimiter="\t"))
+            routes = ["CIGAR", "SPLITREAD", "SPLITANDMAP", "CIGAR+SPLITANDMAP"]
+            cell = {(d["group"], d["methods"]): d for d in gbl}
+            hdr = "".join(f"<th>{r.replace('CIGAR+SPLITANDMAP','both')}</th>" for r in routes)
+            body = "".join(
+                "<tr><td><b>" + GLAB[g] + "</b></td>" + "".join(
+                    (f"<td>{cell[(g, r)]['calls']} ({cell[(g, r)]['pct_in_register']}%)</td>" if (g, r) in cell else "<td>–</td>")
+                    for r in routes) + "</tr>" for g in GROUPS)
+            grp_route_tbl = (f"<p><b>Route × group</b> (calls, with in-register %):</p>"
+                             f"<table><tr><th>group</th>{hdr}</tr>{body}</table>")
         srcbreak = f"""<h2>13. Where the calls come from (detection route) &amp; in-register by route</h2>
 <p>Each call is found by one or more routes: <b>CIGAR</b> (inline I/D in a single alignment), <b>SPLITREAD</b>
 (the aligner already split the read via its <code>SA</code> tag — Sniffles-compatible), <b>SPLITANDMAP</b> (we split the
@@ -299,7 +338,8 @@ read at the contrast frontier and re-mapped — not visible to stock Sniffles). 
 (|svlen| mod 178 heuristic; the rigorous TRASH version is §9, singletons).</p>
 {im(route_fig, 'Reads recovered per route. CIGAR (inline indel) finds the most and is the most in-register; split-and-map adds ~2000 events invisible to stock Sniffles; split-read is the aligner’s own SA splits.') if route_fig else ''}
 <table><tr><th>route</th><th>calls</th><th>in-register</th><th>DEL</th><th>INS</th><th>DUP</th><th>INV</th><th>BND</th></tr>{rws}</table>
-<div class=box>CIGAR (86.7%) and SPLITANDMAP (83.0%) are both highly in-register. The split point in split-and-map is
+{grp_route_tbl}
+<div class=box>CIGAR and SPLITANDMAP are both highly in-register. The split point in split-and-map is
 found by a <b>CUSUM change-point</b>: walk the read's per-base match/mismatch (0/1), keep a running sum of
 (value − mean mismatch rate) — it drifts up through noisy stretches and down through clean ones, so its extreme marks the
 clean↔noisy <b>frontier</b>, which is where we cut. This replaced an earlier global-contrast argmax that got pulled to a
@@ -401,25 +441,27 @@ calling anything a somatic hotspot.</p>
     supp = ""
     sd = f"{OUT}/support_distribution.tsv"
     if os.path.exists(f"{OUT}/figures/support_distribution.png") and os.path.exists(sd):
+        gcol = "group"  # step 12 emits a per-group column now
         d = defaultdict(lambda: {"n": 0, "one": 0, "mx": 0})
         for r in csv.DictReader(open(sd), delimiter="\t"):
-            s = int(r["support"]); n = int(r["n_loci"]); t = r["tissue"]
+            if r.get("set", "all_reads") != "all_reads":
+                continue
+            s = int(r["support"]); n = int(r["n_loci"]); t = r[gcol]
             d[t]["n"] += n; d[t]["mx"] = max(d[t]["mx"], s)
             if s == 1: d[t]["one"] += n
         nsing = sum(1 for _ in open(f"{OUT}/singleton_events.tsv")) - 1
         srow = "".join(
-            f"<tr><td>{t}</td><td>{d[t]['n']}</td><td>{d[t]['one']} ({100*d[t]['one']/max(d[t]['n'],1):.0f}%)</td>"
-            f"<td>{d[t]['n']-d[t]['one']}</td><td>{d[t]['mx']}×</td></tr>" for t in ("leaf", "pollen"))
+            f"<tr><td>{GLAB.get(g, g)}</td><td>{d[g]['n']}</td><td>{d[g]['one']} ({100*d[g]['one']/max(d[g]['n'],1):.0f}%)</td>"
+            f"<td>{d[g]['n']-d[g]['one']}</td><td>{d[g]['mx']}×</td></tr>" for g in GROUPS)
         supp = f"""<h2>8. Read-support distribution &amp; the 1× events</h2>
 <p>This is <b>not</b> a Sniffles VAF (no allele-frequency model) — it is simply the number of independent reads carrying
 the same event (per-read calls clustered into loci within 100 bp). <b>support = 1 means the event is seen in exactly one
-read</b> — the exclusively single-molecule (singleton) class, the cleanest somatic candidate. Most loci are singletons
-({d['leaf']['one']*100//max(d['leaf']['n'],1)}% leaf, {d['pollen']['one']*100//max(d['pollen']['n'],1)}% pollen). The
-high-support tail is <b>coverage-capped</b>: leaf reaches &gt;50× support, pollen tops out ~{d['pollen']['mx']}× because
-it is only ~30× deep — so leaf's recurrent loci (mostly the fixed-vs-reference events of §7) simply cannot appear in pollen.
+read</b> — the exclusively single-molecule (singleton) class, the cleanest somatic candidate. Most loci are singletons in
+every group. The high-support tail is <b>coverage-capped</b> (deep leaf reaches &gt;50×, shallow pollen tops out low), so the
+right panel read-budget-matches all groups to a common depth for a fair support comparison.
 <b>{nsing} singleton (1×) events</b> are written to <code>results/singleton_events.tsv</code>.</p>
-<table><tr><th>tissue</th><th>SV loci</th><th>1× (singleton)</th><th>≥2×</th><th>max support</th></tr>{srow}</table>
-{imf('support_distribution', 'Loci binned by supporting-read count (log y); 1× shaded. Left = all reads (leaf’s depth gives a long tail); right = read-budget matched (leaf downsampled to pollen ≈25k reads/hap) — at equal reads pollen has MORE SV loci than leaf.')}"""
+<table><tr><th>group</th><th>SV loci</th><th>1× (singleton)</th><th>≥2×</th><th>max support</th></tr>{srow}</table>
+{imf('support_distribution', 'Loci binned by supporting-read count (log y); 1× shaded. Left = all reads; right = read-budget matched (all groups downsampled to a common depth/hap).')}"""
 
     # singleton annotation (step 13) — trustworthiness of the 1x events
     ann = ""
@@ -429,14 +471,15 @@ it is only ~30× deep — so leaf's recurrent loci (mostly the fixed-vs-referenc
         agg = defaultdict(lambda: Counter())
         ireg = defaultdict(int); inarr = defaultdict(int); ndi = defaultdict(int)
         for d in al:
-            agg[d["tissue"]][d["confidence"]] += 1
+            s = d["sample"]
+            agg[s][d["confidence"]] += 1
             if d["svtype"] in ("DEL", "INS"):
-                ndi[d["tissue"]] += 1
-                ireg[d["tissue"]] += int(d["in_register"]); inarr[d["tissue"]] += int(d["in_cen180_array"] or 0)
+                ndi[s] += 1
+                ireg[s] += int(d["in_register"]); inarr[s] += int(d["in_cen180_array"] or 0)
         arow = "".join(
-            f"<tr><td>{t}</td><td>{sum(agg[t].values())}</td><td>{agg[t]['HIGH']}</td><td>{agg[t]['MEDIUM']}</td>"
-            f"<td>{agg[t]['LOW']}</td><td>{ndi[t]}</td><td>{inarr[t]} ({100*inarr[t]//max(ndi[t],1)}%)</td>"
-            f"<td>{ireg[t]} ({100*ireg[t]//max(ndi[t],1)}%)</td></tr>" for t in ("leaf", "pollen"))
+            f"<tr><td>{GLAB.get(g, g)}</td><td>{sum(agg[g].values())}</td><td>{agg[g]['HIGH']}</td><td>{agg[g]['MEDIUM']}</td>"
+            f"<td>{agg[g]['LOW']}</td><td>{ndi[g]}</td><td>{inarr[g]} ({100*inarr[g]//max(ndi[g],1)}%)</td>"
+            f"<td>{ireg[g]} ({100*ireg[g]//max(ndi[g],1)}%)</td></tr>" for g in GROUPS)
         ann = f"""<h2>9. Are the 1× events trustworthy? (per-read TRASH annotation)</h2>
 <p>A single read with an SV is either a real somatic molecule or a one-off artifact — support alone cannot tell them apart.
 Each 1× event is annotated with orthogonal evidence (<code>results/singleton_events_annotated.tsv</code>): the detector(s)
@@ -445,8 +488,8 @@ that found it, the read's divergence (<code>de</code>) and MAPQ, and — the key
 we then find the monomer immediately <b>left and right of the junction</b>. <b>in_CEN178_array</b> = both flanking monomers
 exist (the event is inside a satellite array); <b>in_register</b> = additionally a whole-CEN178-monomer event (|svlen| mod 178
 ≈ 0) — the unequal-sister-chromatid-HR signature, vs an out-of-phase NHEJ-like junction. Confidence = HIGH/MEDIUM/LOW from the
-combination. Among DEL/INS singletons, ~77–85% sit in a confirmed CEN178 array and ~44–48% are in-register.</p>
-<table><tr><th>tissue</th><th>1× events</th><th>HIGH</th><th>MEDIUM</th><th>LOW</th><th>DEL/INS</th><th>in CEN178 array</th><th>in-register</th></tr>{arow}</table>
+combination. The key comparison is the <b>in-register (whole-monomer, unequal-HR) fraction in CENH3ox vs WT</b>.</p>
+<table><tr><th>group</th><th>1× events</th><th>HIGH</th><th>MEDIUM</th><th>LOW</th><th>DEL/INS</th><th>in CEN178 array</th><th>in-register</th></tr>{arow}</table>
 <p class=cap style="font-size:12.5px;color:#666">Sorted, fully annotated list (start with the HIGH rows): <code>results/singleton_events_annotated.tsv</code>.</p>"""
 
     html = f"""<!doctype html><meta charset=utf-8><title>Single-molecule centromere SVs — WT</title>
@@ -455,39 +498,42 @@ h1{{border-bottom:3px solid #C0392B;padding-bottom:9px;font-size:24px}}h2{{color
 figure{{text-align:center;margin:16px 0}}figcaption{{font-size:12.5px;color:#666;font-style:italic}}
 table{{border-collapse:collapse;margin:10px 0;font-size:14px}}td,th{{border:1px solid #ddd;padding:4px 10px}}
 .box{{background:#EBF5FB;border-left:4px solid #3498DB;padding:10px 15px;margin:12px 0}}</style>
-<h1>Single-molecule structural variants in the centromere — WT F1 (Col×Ler)</h1>
-<p>WT leaf &amp; pollen, both haplotypes (reads → Col-HiFi / Ler-HiFi, winnowmap). Candidate reads
+<h1>Single-molecule structural variants in the centromere — WT vs CENH3ox, F1 (Col×Ler)</h1>
+<p>Leaf &amp; pollen, <b>WT and CENH3ox</b>, both haplotypes (reads → Col-HiFi / Ler-HiFi, winnowmap). Candidate reads
 (de≥0.005 ∨ NM≥50 ∨ SA) were scanned at the <b>single-molecule</b> level by two complementary detectors that
 share Sniffles2's own topology classifier (<code>sv.classify_splits</code>, run per-read with no min-support):
 (1) <b>CIGAR + split-read leadprov</b> and (2) <b>split-and-map</b> (re-map of substitution-contrast-split fragments).
-Stock Sniffles2 (<code>--minsupport 1 --mosaic</code>) is shown as a concordance reference.</p>
-<div class=box><b>{n}</b> single-molecule SV calls — leaf {by_tis['leaf']}, pollen {by_tis['pollen']} (raw; not comparable).
-<b>Read-Mb-normalized, pollen &gt; leaf</b> ({', '.join(f"{r['tissue']}/{r['hap']} {float(r['ALL_per_mb']):.2f}" for r in sorted(rates, key=lambda r:(r['tissue'],r['hap'])))} calls/Mb).
+CENH3 overexpression is expected to destabilize centromeres, so the hypothesis is <b>more single-molecule centromere SVs in
+CENH3ox than WT</b>. Because coverage differs, all comparisons are per read-Mb.</p>
+<div class=box><b>{n}</b> single-molecule SV calls across 4 groups (haps pooled): {', '.join(f"{GLAB[g]} {by_grp[g]}" for g in GROUPS)} (raw counts; depth differs → see §2).
+<b>Per read-Mb</b>: {', '.join(f"{GLAB[g]} {grate[g]:.2f}" for g in GROUPS)} calls/Mb.
 By type: {', '.join(f'{t} {by_type[t]}' for t in TYPES if by_type[t])}.
-Stock-Sniffles concordant: {stock}/{n} ({100*stock/max(n,1):.1f}%).
 {('CEN178 in-register (whole-monomer indels): %d/%d (%.1f%%).' % (sum(inph), len(inph), 100*sum(inph)/max(len(inph),1))) if inph else ''}</div>
 <h2>0. Dataset at a glance</h2>
-<p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi. Reads are haplotype-split and mapped to each parental
-assembly (Col-HiFi, Ler-HiFi). The centromere windows total ≈11.5 Mb per assembly across the 5 chromosomes (CEN178 satellite,
-178-bp monomer). Only reads anchored in those windows are analysed. "Candidate reads" pass the divergence/split gate; each SV
-call below comes from one read.</p>
+<p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi, <b>WT and CENH3ox</b>. Reads are haplotype-split and
+mapped to each parental assembly (Col-HiFi, Ler-HiFi; CENH3ox uses the same references). The centromere windows total ≈11.5 Mb
+per assembly across the 5 chromosomes (CEN178 satellite, 178-bp monomer). Only reads anchored in those windows are analysed.
+"Candidate reads" pass the divergence/split gate; each SV call below comes from one read.</p>
 {glance}
-<h2>1. Calls by type, tissue, haplotype (raw counts)</h2>{im(f1, 'Raw single-molecule SV counts. Leaf is ~500× / pollen ~30×, so leaf yields more events purely from depth — NOT comparable. See §2.')}
-<h2>2. Read-Mb-normalized rate (leaf vs pollen comparable)</h2>
-<p>Normalized by Mb of mapped read sequence inside the centromere (sum of aligned bp overlapping the CEN window per primary read).
-This removes the depth difference. <b>Per Mb, pollen carries a higher single-molecule SV rate than leaf</b> — the raw leaf-heavy
-counts were a depth artifact.</p>
-{im(fr, 'Calls per Mb of CEN-mapped read sequence. Pollen rate > leaf rate once depth is removed.')}
+<h2>1. Calls by type &amp; group (raw counts)</h2>{im(f1, 'Raw single-molecule SV counts per genotype×tissue (haps pooled). Depth differs between groups (leaf ~500×, pollen ~30×; WT vs CENH3ox also differ), so raw counts are NOT comparable — see §2.')}
+<h2>2. Read-Mb-normalized rate — WT vs CENH3ox</h2>
+<p>Normalized by Mb of mapped read sequence inside the centromere (sum of aligned bp overlapping the CEN window per primary read),
+which removes the depth difference. The comparison of interest is <b>WT vs CENH3ox within each tissue</b>:
+<b>CENH3ox leaf {grate['cenh3ox_leaf']:.2f} vs WT leaf {grate['wt_leaf']:.2f} calls/Mb</b>
+({grate['cenh3ox_leaf']/max(grate['wt_leaf'],1e-9):.1f}×), and
+<b>CENH3ox pollen {grate['cenh3ox_pollen']:.2f} vs WT pollen {grate['wt_pollen']:.2f}</b>
+({grate['cenh3ox_pollen']/max(grate['wt_pollen'],1e-9):.1f}×).</p>
+{im(fr, 'Calls per Mb of CEN-mapped read sequence, per group. CENH3ox vs WT within each tissue is the key contrast.')}
 {rate_tbl}
-<h2>3. Read-quality controls — is the pollen rate an artifact?</h2>
-<p>For <b>single-molecule</b> calling each read is an independent sample, so depth does not bias the per-Mb rate (more
-coverage just samples more molecules). The remaining ways pollen could be inflated are read <i>properties</i>. None hold:
-pollen reads are only modestly shorter (median {float(qc[2]['cen_med_kb']):.0f} vs {float(qc[0]['cen_med_kb']):.0f} kb, already
-absorbed by per-Mb), have a <b>lower</b> arm error rate ({float(qc[2]['arm_de_pct']):.3f}% vs {float(qc[0]['arm_de_pct']):.3f}%),
-<b>more</b> HiFi passes (np {float(qc[2]['np_med']):.0f} vs {float(qc[0]['np_med']):.0f}) and higher predicted accuracy
-(rq {float(qc[2]['rq_med_pct']):.3f}% vs {float(qc[0]['rq_med_pct']):.3f}%). Pollen reads are equal-or-better quality, so the
-higher pollen per-Mb SV rate is not a read-quality artifact.</p>
-{im(fq, 'Read-quality controls. Pollen (red) ≤ leaf (blue) on error and ≥ on passes; shorter length is handled by per-Mb normalization.')}
+<h2>3. Read-quality controls — is the rate difference an artifact?</h2>
+<p>For <b>single-molecule</b> calling each read is an independent sample, so depth does not bias the per-Mb rate. The remaining
+ways a group could be inflated are read <i>properties</i>. Per-group medians (haps averaged): CEN read length
+{', '.join(f"{GLAB[g]} {qcmp('cen_med_kb')[g]:.0f}kb" for g in GROUPS)}; arm de% (≈ error)
+{', '.join(f"{GLAB[g]} {qcmp('arm_de_pct')[g]:.3f}" for g in GROUPS)}; HiFi passes
+{', '.join(f"{GLAB[g]} {qcmp('np_med')[g]:.0f}" for g in GROUPS)}. <b>CENH3ox reads are not lower quality than WT</b>
+(comparable error rate and passes), so the CENH3ox rate elevation is not a read-quality artifact. The residual caveat
+(satellite mapping ambiguity, §11–12) applies equally to all groups.</p>
+{im(fq, 'Read-quality controls per group. CENH3ox is comparable to WT in error and passes; length differences are handled by per-Mb normalization.')}
 {qc_tbl}
 <p class=note style="background:#FDEDEC;border-left:4px solid #C0392B;padding:9px 14px">The one control these cannot rule out is
 <b>mapping ambiguity within the satellite array</b> — a perfectly accurate read placed at the wrong monomer copy yields a spurious

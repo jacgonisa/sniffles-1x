@@ -20,11 +20,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
-from common import SAMPLES, HAPS, CEN, bam_path, OUT, MONO
+from common import SAMPLES, HAPS, CEN, GROUPS, bam_path, OUT, MONO
 
 FIGDIR = f"{OUT}/figures"; os.makedirs(FIGDIR, exist_ok=True)
 HTML = "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/figures_pptx.html"
-SAMPLE_ROWS = ["wt_leaf", "wt_pollen"]
+SAMPLE_ROWS = GROUPS  # wt/cenh3ox × leaf/pollen
+SCOL = {"wt_leaf": "#4C9A2A", "cenh3ox_leaf": "#1B5E20", "wt_pollen": "#E8820C", "cenh3ox_pollen": "#B34700"}
+# karyogram vertical offset per group (4 lanes around each chromosome bar)
+KOFF = {"wt_leaf": 0.42, "cenh3ox_leaf": 0.15, "wt_pollen": -0.15, "cenh3ox_pollen": -0.42}
 TYPE4 = ["INS", "DEL", "DUP", "INV"]
 COL = {"INS": "#2C6FBB", "DEL": "#D2622B", "DUP": "#E8D44D", "INV": "#3FA45B"}
 CHROMS = ["Chr1", "Chr2", "Chr3", "Chr4", "Chr5"]
@@ -104,7 +107,7 @@ def subsample_by_reads(rows, denom):
     """Read-budget match the genome maps: downsample each sample to the same number of
     CEN reads per haplotype (= the smaller sample, i.e. pollen) so visual crowding is fair.
     Deterministic per-read keep (crc32) so all calls of a kept read survive together."""
-    N = {h: min(denom[("wt_leaf", h)], denom[("wt_pollen", h)]) for h in HAPS}
+    N = {h: min(denom[(s, h)] for s in SAMPLE_ROWS) for h in HAPS}
     p = {(s, h): N[h] / denom[(s, h)] for s in SAMPLE_ROWS for h in HAPS}
     out = []
     for r in rows:
@@ -175,15 +178,15 @@ def fig_karyogram(rows, hap, path, orient, budget=""):
                                    fc=FWD_COL if st == "+" else REV_COL, ec="none", alpha=0.85, zorder=2))
         ax.text(-0.6, y, chrom, ha="right", va="center", fontsize=11)
         for r in (r for r in sub if r["chrom"] == chrom):
-            off = 0.42 if r["sample"] == "wt_leaf" else -0.42
-            jit = rng.uniform(-0.06, 0.06)
+            off = KOFF.get(r["sample"], 0.0)
+            jit = rng.uniform(-0.05, 0.05)
             ax.plot([r["pos"] / 1e6], [y + off + jit], marker='|', ms=5, mew=0.8,
                     color=COL[r["svtype"]], zorder=3)
     ax.set_xlim(-2, max(max(v.values()) for v in CHRLEN.values()) / 1e6 + 1)
     ax.set_ylim(0.2, len(CHROMS) + 1.1)
     ax.set_yticks([]); ax.set_xlabel("Coordinate (Mb)")
-    ax.text(0.01, 0.99, "leaf events above bar · pollen below · grey=arm, red/blue=CEN178 fwd/rev",
-            transform=ax.transAxes, va="top", fontsize=9, color="#555")
+    ax.text(0.01, 0.99, "lanes top→bottom: WT leaf · CENH3ox leaf · WT pollen · CENH3ox pollen · grey=arm, red/blue=CEN178 fwd/rev",
+            transform=ax.transAxes, va="top", fontsize=8, color="#555")
     handles = [Line2D([0], [0], marker='|', color=COL[t], lw=0, markersize=10, mew=2, label=t.lower()) for t in TYPE4]
     ax.legend(handles=handles, loc="lower right", fontsize=9, ncol=4, frameon=False)
     ax.set_title(f"Genome-wide single-molecule SV karyogram — {'Col' if hap=='col' else 'Ler'}-HiFi "
@@ -203,13 +206,12 @@ def fig_size_permillion(rows, denom, out="size_per_million", tag=""):
         a = abs(r["svlen"])
         bi = next(k for k in range(len(BINLAB)) if BINEDGES[k] <= a < BINEDGES[k + 1])
         cnt[(r["sample"], r["svtype"])][bi] += 1
-    fig, axes = plt.subplots(1, 4, figsize=(15, 3.6))
-    x = np.arange(len(BINLAB)); w = 0.38
-    scol = {"wt_leaf": "#4C9A2A", "wt_pollen": "#E8820C"}
+    fig, axes = plt.subplots(1, 4, figsize=(16, 3.8))
+    x = np.arange(len(BINLAB)); w = 0.2
     for ax, t in zip(axes, TYPE4):
         for k, s in enumerate(SAMPLE_ROWS):
             rate = [cnt[(s, t)][bi] / permillion[s] for bi in range(len(BINLAB))]
-            ax.bar(x + (k - 0.5) * w, rate, w, color=scol[s], label=s)
+            ax.bar(x + (k - 1.5) * w, rate, w, color=SCOL[s], label=s)
         ax.set_title(t); ax.set_xticks(x); ax.set_xticklabels(BINLAB, rotation=45, ha="right", fontsize=8)
         ax.set_xlabel("width")
     axes[0].set_ylabel("count per million reads")

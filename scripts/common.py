@@ -7,9 +7,17 @@ import os
 ROOT = "/mnt/ssd-4tb/HIFI_NAMIL"
 OUT = f"{ROOT}/single_molecule_sv/results"
 
-# (sample, tissue, bam_subdir)
-SAMPLES = [("wt_leaf", "leaf"), ("wt_pollen", "pollen")]
+# (sample, tissue). sample name is genotype_tissue, so `sample` doubles as the
+# genotype×tissue group key; genotype(sample) recovers the genotype axis.
+SAMPLES = [("wt_leaf", "leaf"), ("wt_pollen", "pollen"),
+           ("cenh3ox_leaf", "leaf"), ("cenh3ox_pollen", "pollen")]
 HAPS = ["col", "ler"]
+
+# fixed display order for the 4 sample groups (WT then CENH3ox, leaf then pollen)
+GROUPS = ["wt_leaf", "cenh3ox_leaf", "wt_pollen", "cenh3ox_pollen"]
+
+def genotype(sample):
+    return "cenh3ox" if "cenh3ox" in sample else "wt"
 
 def bam_path(sample, hap):
     return f"{ROOT}/sv_calling/aligned/{sample}/strict90/{hap}_all.bam"

@@ -15,7 +15,7 @@ import pysam
 sm = importlib.import_module("03_split_and_map")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN, REF, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, REF, GROUPS, bam_path, OUT
 
 CHRLEN = {"col": {"Chr1": 32640075, "Chr2": 23012915, "Chr3": 26150667, "Chr4": 22582341, "Chr5": 30170985},
           "ler": {"Chr1": 32485061, "Chr2": 21328600, "Chr3": 27335240, "Chr4": 22700724, "Chr5": 30661135}}
@@ -96,32 +96,32 @@ def main():
         for sample, tis in SAMPLES:
             for hap in HAPS:
                 nr, cnt = run_one(sample, hap, td)
-                arm_reads[tis] += nr
+                arm_reads[sample] += nr
                 for k, v in cnt.items():
-                    arm_cnt[tis][k] += v
+                    arm_cnt[sample][k] += v
                 print(f"{sample} {hap}: arm reads {nr}, split-and-map {dict(cnt)}")
 
     # CEN split-and-map rate from split_and_map.tsv + cen_read_counts
     cen_cnt = defaultdict(Counter); cen_reads = defaultdict(int)
     for r in csv.DictReader(open(f"{OUT}/split_and_map.tsv"), delimiter="\t"):
-        cen_cnt["leaf" if r["sample"] == "wt_leaf" else "pollen"][r["svtype"]] += 1
+        cen_cnt[r["sample"]][r["svtype"]] += 1
     with open(f"{OUT}/cen_read_counts.tsv") as f:
         next(f)
         for ln in f:
-            s, h, n = ln.split(); cen_reads["leaf" if s == "wt_leaf" else "pollen"] += int(n)
+            s, h, n = ln.split(); cen_reads[s] += int(n)
 
-    cols = ["tissue", "svtype", "cen_per_Mreads", "arm_per_Mreads", "enrichment_CEN_over_ARM"]
+    cols = ["group", "svtype", "cen_per_Mreads", "arm_per_Mreads", "enrichment_CEN_over_ARM"]
     with open(f"{OUT}/arm_splitmap_control.tsv", "w") as f:
         f.write("\t".join(cols) + "\n")
-        print(f"{'tissue':8}{'type':5}{'CEN/Mr':>9}{'ARM/Mr':>9}{'CEN÷ARM':>9}  (split-and-map route)")
-        for tis in ("leaf", "pollen"):
-            cm = cen_reads[tis] / 1e6; am = arm_reads[tis] / 1e6
+        print(f"{'group':16}{'type':5}{'CEN/Mr':>9}{'ARM/Mr':>9}{'CEN÷ARM':>9}  (split-and-map route)")
+        for samp in GROUPS:
+            cm = cen_reads[samp] / 1e6; am = arm_reads[samp] / 1e6
             for t in TYPES:
-                cr = cen_cnt[tis][t] / cm if cm else 0; ar = arm_cnt[tis][t] / am if am else 0
+                cr = cen_cnt[samp][t] / cm if cm else 0; ar = arm_cnt[samp][t] / am if am else 0
                 enr = round(cr / ar, 1) if ar else float("inf")
-                f.write(f"{tis}\t{t}\t{cr:.1f}\t{ar:.1f}\t{enr}\n")
-                print(f"{tis:8}{t:5}{cr:9.1f}{ar:9.1f}{str(enr):>9}")
-    print(f"arm reads: leaf {arm_reads['leaf']}, pollen {arm_reads['pollen']}")
+                f.write(f"{samp}\t{t}\t{cr:.1f}\t{ar:.1f}\t{enr}\n")
+                print(f"{samp:16}{t:5}{cr:9.1f}{ar:9.1f}{str(enr):>9}")
+    print(f"arm reads: {dict(arm_reads)}")
     print("DONE_ARM_SPLITMAP")
 
 

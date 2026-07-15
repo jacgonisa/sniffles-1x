@@ -158,12 +158,12 @@ def main():
             f.write("\t".join(str(d.get(c, "")) for c in cols) + "\n")
 
     print("=== singleton annotation summary (TRASH on full read; flanking-monomer phase) ===")
-    for tis in ("leaf", "pollen"):
-        sub = [d for d in out if d["tissue"] == tis]
+    for samp in sorted({d["sample"] for d in out}):
+        sub = [d for d in out if d["sample"] == samp]
         c = Counter(d["confidence"] for d in sub)
         ind = [d for d in sub if d["svtype"] in ("DEL", "INS")]
         ireg = sum(d["in_register"] for d in ind); inarr = sum(d["in_cen180_array"] for d in ind)
-        print(f"{tis}: n={len(sub)}  HIGH={c['HIGH']} MED={c['MEDIUM']} LOW={c['LOW']}  | DEL/INS={len(ind)} "
+        print(f"{samp}: n={len(sub)}  HIGH={c['HIGH']} MED={c['MEDIUM']} LOW={c['LOW']}  | DEL/INS={len(ind)} "
               f"in_CEN178_array={inarr} in_register={ireg} ({100*ireg/max(len(ind),1):.0f}% of DEL/INS)")
     print("DONE_ANNOTATE")
 

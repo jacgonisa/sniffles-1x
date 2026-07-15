@@ -13,8 +13,10 @@ import pysam, statistics as st, sys
 sys.path.insert(0, "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/scripts")
 from common import SAMPLES, HAPS, CEN, bam_path, OUT
 
-SRC = {"leaf": "/mnt/ssd-4tb/HIFI_NAMIL/01_f1leaf-wt/data/WT_leaf.hifi_reads.bam",
-       "pollen": "/mnt/ssd-4tb/HIFI_NAMIL/03_f1pollen-wt/03_F1pollen_WT-1/data/WT_pollen.hifi_reads.bam"}
+SRC = {"wt_leaf": "/mnt/ssd-4tb/HIFI_NAMIL/01_f1leaf-wt/data/WT_leaf.hifi_reads.bam",
+       "wt_pollen": "/mnt/ssd-4tb/HIFI_NAMIL/03_f1pollen-wt/03_F1pollen_WT-1/data/WT_pollen.hifi_reads.bam",
+       "cenh3ox_leaf": "/mnt/ssd-4tb/HIFI_NAMIL/02_f1leaf-cenh3ox/data/CENH3ox_leaf.hifi_reads.bam",
+       "cenh3ox_pollen": "/mnt/ssd-4tb/HIFI_NAMIL/04_f1pollen-cenh3ox-hifi/05_F1pollen_CENH3-1/data/CENH3_pollen.hifi_reads.bam"}
 ARM = [('Chr1', 2_000_000, 10_000_000), ('Chr2', 8_000_000, 15_000_000)]
 CAP = 300000
 
@@ -50,7 +52,7 @@ def src_np_rq(path):
 
 
 def main():
-    npm = {t: src_np_rq(p) for t, p in SRC.items()}   # tissue -> (np_med, rq_med%)
+    npm = {s: src_np_rq(p) for s, p in SRC.items()}   # sample -> (np_med, rq_med%)
     rows = []
     for sample, tis in SAMPLES:
         for hap in HAPS:
@@ -58,7 +60,7 @@ def main():
             de_arm, _ = de_len(bam, ARM)
             de_cen, ln_cen = de_len(bam, [(c, a, b) for c, (a, b) in CEN[hap].items()])
             bam.close()
-            np_med, rq_med = npm[tis]
+            np_med, rq_med = npm[sample]
             rows.append({"sample": sample, "hap": hap, "tissue": tis,
                          "cen_med_kb": st.median(ln_cen) / 1e3,
                          "arm_de_pct": st.mean(de_arm) * 100,

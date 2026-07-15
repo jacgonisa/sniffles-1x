@@ -10,7 +10,7 @@ locus is in the `mate` column (mate_contig:mate_ref_start). We categorize each m
 Run with nextflow_env python."""
 import csv
 from collections import Counter
-from common import CEN, OUT
+from common import CEN, OUT, GROUPS
 
 
 def cat(hap, mate):
@@ -59,14 +59,14 @@ def main():
     except FileNotFoundError:
         denom = None
     with open(f"{OUT}/crossmap_background.tsv", "w") as f:
-        f.write("tissue\tinterCEN_BND\tcen_reads\tper_million_reads\n")
+        f.write("group\tinterCEN_BND\tcen_reads\tper_million_reads\n")
         print("--- satellite cross-mapping background (inter-CEN BND / million reads) ---")
-        for tis, samp in (("leaf", "wt_leaf"), ("pollen", "wt_pollen")):
-            n = sum(1 for d in out if d["tissue"] == tis and d["category"] == "other_CEN")
+        for samp in GROUPS:
+            n = sum(1 for d in out if d["sample"] == samp and d["category"] == "other_CEN")
             reads = sum(denom.get((samp, h), 0) for h in ("col", "ler")) if denom else 0
             rate = n / reads * 1e6 if reads else 0
-            f.write(f"{tis}\t{n}\t{reads}\t{rate:.1f}\n")
-            print(f"  {tis}: {n} inter-CEN BND / {reads} reads = {rate:.1f} per million")
+            f.write(f"{samp}\t{n}\t{reads}\t{rate:.1f}\n")
+            print(f"  {samp}: {n} inter-CEN BND / {reads} reads = {rate:.1f} per million")
     print("DONE_TRANSLOC")
 
 

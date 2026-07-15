@@ -15,7 +15,7 @@ import importlib, csv
 from collections import Counter, defaultdict
 import pysam
 lp = importlib.import_module("02_leadprov_sm")
-from common import SAMPLES, HAPS, CEN, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, GROUPS, bam_path, OUT
 
 CHRLEN = {"col": {"Chr1": 32640075, "Chr2": 23012915, "Chr3": 26150667, "Chr4": 22582341, "Chr5": 30170985},
           "ler": {"Chr1": 32485061, "Chr2": 21328600, "Chr3": 27335240, "Chr4": 22700724, "Chr5": 30661135}}
@@ -36,8 +36,8 @@ def arm_windows(hap):
 
 
 def main():
-    arm_cnt = defaultdict(lambda: Counter())   # tissue -> svtype -> n
-    arm_reads = defaultdict(int)               # tissue -> reads
+    arm_cnt = defaultdict(lambda: Counter())   # sample -> svtype -> n
+    arm_reads = defaultdict(int)               # sample -> reads
     for sample, tis in SAMPLES:
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
@@ -47,45 +47,45 @@ def main():
                         continue
                     if r.mapping_quality < lp.MAPQ_MIN or not (a <= r.reference_start < b):
                         continue
-                    arm_reads[tis] += 1
+                    arm_reads[sample] += 1
                     for svtype, pos, svlen in lp.cigar_leads(r):
                         if a <= pos < b:
-                            arm_cnt[tis][svtype] += 1
+                            arm_cnt[sample][svtype] += 1
                     for svtype, pos, svlen, mapq, mate in lp.split_leads(r, chrom):
                         if mapq >= lp.MAPQ_MIN and a <= pos < b:
-                            arm_cnt[tis][svtype] += 1
+                            arm_cnt[sample][svtype] += 1
             bam.close()
             print(f"{sample} {hap}: arm done")
 
     # CEN leadprov rate (from leadprov_sm.tsv) for comparison
     cen_cnt = defaultdict(lambda: Counter()); cen_reads = defaultdict(int)
     for r in csv.DictReader(open(f"{OUT}/leadprov_sm.tsv"), delimiter="\t"):
-        cen_cnt[r["tissue"]][r["svtype"]] += 1
+        cen_cnt[r["sample"]][r["svtype"]] += 1
     with open(f"{OUT}/cen_read_counts.tsv") as f:
         next(f)
         for ln in f:
             s, h, nr = ln.split()
-            cen_reads["leaf" if s == "wt_leaf" else "pollen"] += int(nr)
+            cen_reads[s] += int(nr)
 
     rows = []
-    for tis in ("leaf", "pollen"):
-        cm = cen_reads[tis] / 1e6; am = arm_reads[tis] / 1e6
+    for samp in GROUPS:
+        cm = cen_reads[samp] / 1e6; am = arm_reads[samp] / 1e6
         for t in TYPES:
-            cr = cen_cnt[tis][t] / cm if cm else 0
-            ar = arm_cnt[tis][t] / am if am else 0
-            rows.append({"tissue": tis, "svtype": t, "cen_per_Mreads": round(cr, 1),
+            cr = cen_cnt[samp][t] / cm if cm else 0
+            ar = arm_cnt[samp][t] / am if am else 0
+            rows.append({"group": samp, "svtype": t, "cen_per_Mreads": round(cr, 1),
                          "arm_per_Mreads": round(ar, 1), "enrichment_CEN_over_ARM": round(cr / ar, 1) if ar else float("inf")})
 
     with open(f"{OUT}/arm_control.tsv", "w") as f:
-        cols = ["tissue", "svtype", "cen_per_Mreads", "arm_per_Mreads", "enrichment_CEN_over_ARM"]
+        cols = ["group", "svtype", "cen_per_Mreads", "arm_per_Mreads", "enrichment_CEN_over_ARM"]
         f.write("\t".join(cols) + "\n")
         for d in rows:
             f.write("\t".join(str(d[c]) for c in cols) + "\n")
 
-    print(f"\narm reads: leaf {arm_reads['leaf']}, pollen {arm_reads['pollen']}  (windows: CEN_end+{ARM_BUFFER//10**6}Mb, {ARM_WIN//10**6}Mb wide)")
-    print(f"{'tissue':8}{'type':5}{'CEN/Mr':>9}{'ARM/Mr':>9}{'CEN÷ARM':>9}")
+    print(f"\narm reads: {dict(arm_reads)}  (windows: CEN_end+{ARM_BUFFER//10**6}Mb, {ARM_WIN//10**6}Mb wide)")
+    print(f"{'group':16}{'type':5}{'CEN/Mr':>9}{'ARM/Mr':>9}{'CEN÷ARM':>9}")
     for d in rows:
-        print(f"{d['tissue']:8}{d['svtype']:5}{d['cen_per_Mreads']:9.1f}{d['arm_per_Mreads']:9.1f}{str(d['enrichment_CEN_over_ARM']):>9}")
+        print(f"{d['group']:16}{d['svtype']:5}{d['cen_per_Mreads']:9.1f}{d['arm_per_Mreads']:9.1f}{str(d['enrichment_CEN_over_ARM']):>9}")
     print("DONE_ARM")
 
 
