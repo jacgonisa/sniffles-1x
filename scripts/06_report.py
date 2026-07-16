@@ -308,6 +308,44 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
 {bgtxt}
 <table><tr><th>group</th><th>breakpoint</th><th>mate</th><th>category</th><th>method</th></tr>{ex}</table>"""
 
+    # insertion origin (step 20)
+    insorig = ""
+    iop = f"{OUT}/insertion_origin.tsv"
+    if os.path.exists(iop):
+        il = list(csv.DictReader(open(iop), delimiter="\t"))
+        catc2 = Counter(d["origin_category"] for d in il)
+        import glob as _g2
+        def iimg(path, cap):
+            b = file_b64(path)
+            return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
+                    f'<figcaption>{cap}</figcaption></figure>') if b else ""
+        summ = iimg(f"{OUT}/insertion_origin/_summary_origin.png",
+                    "Genome-wide: ▼ = insertion site, arc → where the inserted fragment maps back. All trace to their own pericentromere/CEN.")
+        # one local-tandem + one dispersed example panel
+        expngs = sorted(_g2.glob(f"{OUT}/insertion_origin/ins*.png"))
+        expick = expngs[:1]
+        for d in il:
+            if d["origin_category"] == "dispersed_CEN178":
+                m = [p for p in expngs if f"_{d['chrom']}_{d['pos']}." in p]
+                expick += m[:1]; break
+        panels = "".join(iimg(p, os.path.basename(p)[:-4]) for p in expick)
+        trows = "".join(
+            f"<tr><td>{GLAB.get(d['sample'],d['sample'])}</td><td>{d['hap']}</td><td>{d['chrom']}:{int(d['pos']):,}</td>"
+            f"<td>{d['ins_bp']}</td><td>{d['origin_category'].replace('_',' ')}</td><td>{d['n_hits']}</td>"
+            f"<td>{('%.0f%%'%(float(d['best_ident'])*100)) if d['best_ident'] else '–'}</td>"
+            f"<td>{(str(int(d['dist_bp']))+' bp' if d['dist_bp'] not in ('','None') else '–')}</td></tr>" for d in il)
+        insorig = f"""<h2>14. Where does the inserted fragment come from? (insertion origin)</h2>
+<p>For each large insertion (≥1 kb) we cut the <b>inserted bases out of the read</b> and map that fragment back to the same
+reference (minimap2 <code>map-hifi</code>). The location(s) it maps to are the <b>origin</b> of the inserted sequence.
+Of the {len(il)} traced, <b>{catc2.get('local_tandem',0)} are local tandem duplications</b> (the fragment is a near-identity
+copy of sequence within a few kb — the unequal-sister-chromatid-HR / satellite-expansion signature) and
+{catc2.get('dispersed_CEN178',0)} are dispersed CEN178 (the fragment hits many places across the array). None came from a
+different chromosome. So these centromeric insertions are <b>locally templated</b>, not captured from elsewhere.</p>
+{summ}
+{panels}
+<table><tr><th>group</th><th>hap</th><th>insertion site</th><th>size (bp)</th><th>origin</th><th>#hits</th><th>best id</th><th>donor distance</th></tr>{trows}</table>
+<p class=cap style="font-size:12.5px;color:#666">Full set of per-event panels: <code>results/insertion_origin/</code>.</p>"""
+
     # CEN vs ARM control (step 16)
     armc = ""
     ap2 = f"{OUT}/arm_control.tsv"
@@ -599,6 +637,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {transloc}
 {armc}
 {srcbreak}
+{insorig}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""

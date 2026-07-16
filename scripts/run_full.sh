@@ -24,5 +24,6 @@ $PY 17_source_breakdown.py
 $PY 18_arm_splitmap.py
 $PY 09_pptx_figures.py
 $BASEPY 14_read_validation.py
+$PY 20_insertion_origin.py
 $PY 06_report.py
 echo "ALL_FULL_DONE"
