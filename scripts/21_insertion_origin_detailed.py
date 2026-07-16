@@ -26,6 +26,18 @@ HP = {"col": "Col", "ler": "Ler"}
 pv.OUT_DIR = OUTDIR    # redirect the lab function's output
 
 
+def pick_locus(sample, hap, chrom, pos, tol=3000):
+    """target one specific INS locus (bypass the size filter) -> [row]."""
+    best = None
+    for r in csv.DictReader(open(f"{OUT}/sm_sv_calls.tsv"), delimiter="\t"):
+        if (r["svtype"] == "INS" and "CIGAR" in r["methods"] and r["sample"] == sample
+                and r["hap"] == hap and r["chrom"] == chrom
+                and r["svlen"] not in ("", "None") and abs(int(r["pos"]) - pos) <= tol):
+            if best is None or abs(int(r["svlen"])) > abs(int(best["svlen"])):
+                best = r
+    return [best] if best else []
+
+
 def pick():
     rows = [r for r in csv.DictReader(open(f"{OUT}/sm_sv_calls.tsv"), delimiter="\t")
             if r["svtype"] == "INS" and "CIGAR" in r["methods"]
@@ -69,8 +81,13 @@ def origin_hits(label, chrom, pos, size, seq, rk):
 
 
 def main():
-    events = pick()
-    print(f"detailed panels for {len(events)} insertions (>= {MINSZ} bp)")
+    if len(sys.argv) >= 5 and sys.argv[1] == "--locus":
+        _, _, sample, hap, chrom, pos = sys.argv[:6]
+        events = pick_locus(sample, hap, chrom, int(pos))
+        print(f"targeted locus {sample} {hap} {chrom}:{pos} -> {len(events)} event")
+    else:
+        events = pick()
+        print(f"detailed panels for {len(events)} insertions (>= {MINSZ} bp)")
     for i, r in enumerate(events):
         s, h, chrom, pos, size = r["sample"], r["hap"], r["chrom"], int(r["pos"]), abs(int(r["svlen"]))
         rk = refkey(s, h); label = f"ins{i:02d}"
