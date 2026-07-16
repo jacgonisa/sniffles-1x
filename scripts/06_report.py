@@ -333,13 +333,22 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
         dpngs = sorted(_g2.glob(f"{OUT}/insertion_origin_detailed/*.png"))
         detailed = ""
         if dpngs:
-            dp = "".join(iimg(p, os.path.basename(p)[:-4]) for p in dpngs[:2])
-            detailed = (f"<h3>14b. Detailed read view — split-read origin · self-similarity dotplot · CCS-quality &amp; k-mer readmer</h3>"
+            # curate: one local-tandem example + the distal (242 kb) example if present
+            distal = [p for p in dpngs if "wt_leaf_ler_ins00" in os.path.basename(p)]
+            local = [p for p in dpngs if p not in distal]
+            show = local[:1] + distal[:1]
+            caps = {}
+            for p in show:
+                caps[p] = ("DISTAL example — inserted 8×CEN178 block copied from 242 kb away in the same Chr5 array (100% id)"
+                           if p in distal else "Local-tandem example — inserted block copied from adjacent sequence")
+            dp = "".join(iimg(p, caps[p]) for p in show)
+            detailed = (f"<h3>14b. Detailed read view — split-read origin · TRASH CEN178 arrows · self-dotplot · CCS-quality &amp; readmer</h3>"
                         f"<p>Per read: the <b>split-read alignment</b> (top bar = where the inserted fragment maps back = origin; "
-                        f"middle = the read, blue flanks + red insertion; bottom bar = flanks), the <b>self-similarity dotplot</b> "
-                        f"(off-diagonal bands = the internal tandem repeat structure of the inserted copy), and per-base <b>CCS quality</b> "
-                        f"+ <b>KMC readmer</b> (dataset k-mer support: high = real/repeated sequence, 1 = sequencing error). "
-                        f"Full set: <code>results/insertion_origin_detailed/</code>.</p>{dp}")
+                        f"middle = the read, blue flanks + red insertion; bottom bar = flanks); a <b>TRASH CEN178 monomer track</b> drawn "
+                        f"as <b>arrows</b> (each monomer points in its strand — head-to-tail satellite; arrows continue through the insertion, "
+                        f"showing it is in-register); the <b>self-similarity dotplot</b> (off-diagonal bands = the tandem repeat structure); "
+                        f"and per-base <b>CCS quality</b> + <b>KMC readmer</b> (dataset k-mer support; WT has no KMC db so it reads "
+                        f"'unavailable'). Full set: <code>results/insertion_origin_detailed/</code>.</p>{dp}")
         trows = "".join(
             f"<tr><td>{GLAB.get(d['sample'],d['sample'])}</td><td>{d['hap']}</td><td>{d['chrom']}:{int(d['pos']):,}</td>"
             f"<td>{d['ins_bp']}</td><td>{d['origin_category'].replace('_',' ')}</td><td>{d['n_hits']}</td>"
