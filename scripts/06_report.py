@@ -75,6 +75,42 @@ def group_rates(rates):
     return {g: {t: (cnt[g][t] / mb[g] if mb[g] else 0) for t in TYPES} for g in GROUPS}, mb
 
 
+def fig_interaction(rates):
+    """Everything in one plot: per-Mb SV rate, tissue on x, one line per genotype,
+    so the genotype×tissue interaction (CENH3ox lifts leaf most) is visible.
+    Thin markers = col/ler haplotypes; thick line = Mb-weighted pooled group rate."""
+    gr, mb = group_rates(rates)
+    grate = {g: sum(gr[g].values()) for g in GROUPS}
+    perhap = {(r["sample"], r["hap"]): float(r["ALL_per_mb"]) for r in rates}
+    fig, ax = plt.subplots(figsize=(6.6, 4.6))
+    X = {"leaf": 0, "pollen": 1}
+    for geno, col in (("wt", "#2980B9"), ("cenh3ox", "#C0392B")):
+        gs = [g for g in GROUPS if g.startswith(geno)]
+        ys = [grate[g] for g in gs]
+        xs = [X["leaf" if "leaf" in g else "pollen"] for g in gs]
+        ax.plot(xs, ys, "-o", color=col, lw=2.6, ms=9, zorder=3,
+                label=("WT" if geno == "wt" else "CENH3ox"))
+        for g in gs:
+            xx = X["leaf" if "leaf" in g else "pollen"]
+            for h in ("col", "ler"):
+                if (g, h) in perhap:
+                    ax.plot(xx, perhap[(g, h)], "o", color=col, ms=5, alpha=0.35, zorder=2)
+            ax.annotate(f"{grate[g]:.2f}", (xx, grate[g]), (xx + 0.03, grate[g] + 0.06),
+                        fontsize=9, color=col, fontweight="bold")
+    # fold annotations
+    for geno, col, yo in (("wt", "#2980B9", -0.28), ("cenh3ox", "#C0392B", 0.18)):
+        gl = grate[f"{geno}_leaf"]; gp = grate[f"{geno}_pollen"]
+        ax.annotate(f"pollen/leaf = {gp/max(gl,1e-9):.1f}×", (0.5, (gl + gp) / 2 + yo),
+                    ha="center", fontsize=8.5, color=col, style="italic")
+    ax.set_xticks([0, 1]); ax.set_xticklabels(["leaf", "pollen"], fontsize=11)
+    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.35)
+    ax.set_ylim(0, max(grate.values()) * 1.2)
+    ax.legend(title="genotype", fontsize=10)
+    ax.set_title("Genotype × tissue: CENH3ox lifts the leaf (somatic) rate most\n(faint dots = col/ler haplotypes)")
+    fig.savefig(f"{OUT}/figures/rate_interaction.png", dpi=140, bbox_inches="tight")  # standalone for slides
+    return png(fig)
+
+
 def fig_rates(rates):
     gr, mb = group_rates(rates)
     fig, ax = plt.subplots(figsize=(8.5, 4.2))
@@ -171,6 +207,7 @@ def main():
     gr, gmb = group_rates(rates)           # per-group per-type calls/Mb, and Mb per group
     grate = {g: sum(gr[g].values()) for g in GROUPS}   # ALL calls/Mb per group
     f1, fr, f2, f3 = fig_counts(rows), fig_rates(rates), fig_sizes(rows), fig_methods(rows)
+    finter = fig_interaction(rates)
     fq = fig_qc(qc) if qc else ""
 
     # dataset-at-a-glance (Arabidopsis / this run) — per group (genotype×tissue) × haplotype
@@ -534,6 +571,11 @@ which removes the depth difference. The comparison of interest is <b>WT vs CENH3
 ({grate['cenh3ox_pollen']/max(grate['wt_pollen'],1e-9):.1f}×).</p>
 {im(fr, 'Calls per Mb of CEN-mapped read sequence, per group. CENH3ox vs WT within each tissue is the key contrast.')}
 {rate_tbl}
+<p><b>Everything in one plot (the genotype×tissue interaction).</b> Depth-corrected, pollen &gt; leaf in <i>both</i> genotypes
+(no true flip), but the <b>tissue bias differs</b>: WT has a strong pollen bias (pollen ≈ 2× leaf), while in CENH3ox the leaf
+nearly catches up (pollen ≈ 1.1× leaf). CENH3ox lifts the <b>leaf</b> rate ~4× but the <b>pollen</b> rate only ~2×, i.e. it adds
+a large <b>somatic/mitotic</b> instability component (visible in leaf) on top of WT's mostly <b>meiotic</b> (pollen-biased) instability.</p>
+{im(finter, 'Per-Mb SV rate, tissue on x, one line per genotype (faint dots = col/ler haplotypes). The WT line rises steeply leaf→pollen; the CENH3ox line is high and nearly flat — the gap between lines (the CENH3ox effect) is largest in leaf.')}
 <h2>3. Read-quality controls — is the rate difference an artifact?</h2>
 <p>For <b>single-molecule</b> calling each read is an independent sample, so depth does not bias the per-Mb rate. The remaining
 ways a group could be inflated are read <i>properties</i>. Per-group medians (haps averaged): CEN read length
