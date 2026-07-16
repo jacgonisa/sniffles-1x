@@ -28,7 +28,7 @@ import matplotlib.patches as mp
 from matplotlib.patches import Polygon
 import matplotlib.gridspec as gridspec
 import trash_py.pipeline as _tp, trash_py._log as _tl
-from common import bam_path, REF, OUT, MONO
+from common import bam_path, REF, OUT, MONO, refkey
 
 OUTDIR = f"{OUT}/read_validation"; os.makedirs(OUTDIR, exist_ok=True)
 WIN = "/home/jg2070/miniforge3/envs/nextflow_env/bin/winnowmap"
@@ -114,14 +114,14 @@ def best_split(read):
     return best[0] if abs((pre[n] - pre[i]) / (n - i) - pre[i] / i) >= 0.01 else None
 
 
-def reproduce_split(read, hap):
+def reproduce_split(read, rk):
     """Re-run the split-and-map for this read: split at the contrast point, winnowmap
     re-map both halves, return the 2 fragments (original-read query coords)."""
     qsplit = best_split(read)
     seq = read.query_sequence
     if qsplit is None or seq is None or qsplit < 1000 or len(seq) - qsplit < 1000:
         return None, None
-    ref, rep = REF[hap]
+    ref, rep = REF[rk]
     with tempfile.TemporaryDirectory() as td:
         fa = f"{td}/f.fa"; bamf = f"{td}/f.bam"
         open(fa, "w").write(f">A\n{seq[:qsplit]}\n>B\n{seq[qsplit:]}\n")
@@ -211,7 +211,7 @@ def draw(ev, bam, fa, outdir=OUTDIR, prefix=""):
     # split-and-map events map linearly in the original BAM — reproduce the split & remap
     reproduced = False; qsplit = None
     if "SPLITANDMAP" in ev.get("methods", "") and len(frags) == 1:
-        rf, qs = reproduce_split(prim, ev["hap"])
+        rf, qs = reproduce_split(prim, refkey(ev["sample"], ev["hap"]))
         if rf and all(f["chrom"] == chrom for f in rf):
             frags = rf; reproduced = True; qsplit = qs
     jq = cigar_junction(prim, pos, svt, svlen)
@@ -361,7 +361,7 @@ def gallery():
         for ev in evs:
             key = (ev["sample"], ev["hap"])
             if key not in cache:
-                cache[key] = (pysam.AlignmentFile(bam_path(*key), "rb"), pysam.FastaFile(REF[ev["hap"]][0]))
+                cache[key] = (pysam.AlignmentFile(bam_path(*key), "rb"), pysam.FastaFile(REF[refkey(ev["sample"], ev["hap"])][0]))
             try:
                 p = draw(ev, *cache[key], outdir=GALLERY, prefix=prefix + "__")
                 if p:
@@ -402,7 +402,7 @@ def main():
     for ev in events:
         key = (ev["sample"], ev["hap"])
         if key not in cache:
-            cache[key] = (pysam.AlignmentFile(bam_path(*key), "rb"), pysam.FastaFile(REF[ev["hap"]][0]))
+            cache[key] = (pysam.AlignmentFile(bam_path(*key), "rb"), pysam.FastaFile(REF[refkey(ev["sample"], ev["hap"])][0]))
         draw(ev, *cache[key])
     print("DONE_VALIDATION")
 

@@ -15,21 +15,19 @@ import importlib, csv
 from collections import Counter, defaultdict
 import pysam
 lp = importlib.import_module("02_leadprov_sm")
-from common import SAMPLES, HAPS, CEN, GROUPS, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, CHRLEN, GROUPS, bam_path, OUT, refkey
 
-CHRLEN = {"col": {"Chr1": 32640075, "Chr2": 23012915, "Chr3": 26150667, "Chr4": 22582341, "Chr5": 30170985},
-          "ler": {"Chr1": 32485061, "Chr2": 21328600, "Chr3": 27335240, "Chr4": 22700724, "Chr5": 30661135}}
 ARM_BUFFER = 5_000_000   # exclude pericentromere / CEN-ARM transition
 ARM_WIN = 3_000_000      # arm window size per chromosome (distal to CEN)
 TYPES = ["DEL", "INS", "DUP", "INV", "BND"]
 
 
-def arm_windows(hap):
+def arm_windows(rk):
     """Distal-arm window per chrom, 5 Mb past CEN end (transition excluded)."""
     w = {}
-    for chrom, (a, b) in CEN[hap].items():
+    for chrom, (a, b) in CEN[rk].items():
         s = b + ARM_BUFFER
-        e = min(s + ARM_WIN, CHRLEN[hap][chrom] - 100_000)
+        e = min(s + ARM_WIN, CHRLEN[rk][chrom] - 100_000)
         if e - s > 200_000:
             w[chrom] = (s, e)
     return w
@@ -41,7 +39,7 @@ def main():
     for sample, tis in SAMPLES:
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
-            for chrom, (a, b) in arm_windows(hap).items():
+            for chrom, (a, b) in arm_windows(refkey(sample, hap)).items():
                 for r in bam.fetch(chrom, a, b):
                     if r.is_unmapped or r.is_secondary or r.is_supplementary:
                         continue

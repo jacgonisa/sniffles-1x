@@ -499,7 +499,13 @@ figure{{text-align:center;margin:16px 0}}figcaption{{font-size:12.5px;color:#666
 table{{border-collapse:collapse;margin:10px 0;font-size:14px}}td,th{{border:1px solid #ddd;padding:4px 10px}}
 .box{{background:#EBF5FB;border-left:4px solid #3498DB;padding:10px 15px;margin:12px 0}}</style>
 <h1>Single-molecule structural variants in the centromere — WT vs CENH3ox, F1 (Col×Ler)</h1>
-<p>Leaf &amp; pollen, <b>WT and CENH3ox</b>, both haplotypes (reads → Col-HiFi / Ler-HiFi, winnowmap). Candidate reads
+<div class=box style="background:#FEF9E7;border-left:4px solid #B7950B"><b>Reference design (important).</b> Each genotype's reads
+are mapped to its <b>own centromere baseline</b>, so a call is a somatic deviation from that genotype's assembly — not the
+fixed Col-vs-CENH3ox remodelling. WT col → Col-HiFi; <b>CENH3ox col → the CENH3ox line's own assembly (CENH3ox-Col-HiFi)</b>;
+both ler haplotypes → Ler-HiFi (no CENH3ox-Ler assembly exists — the remodelled centromere is the Col one, where CENH3 acts).
+CENH3ox col reads are the winnowmap <code>-ax map-pb --MD</code> alignments to the CENH3ox col-parent assembly
+(<code>sv_calling/aligned_matched/</code>), the same reads as the WT-ref col mapping, just against the CENH3ox baseline.</div>
+<p>Leaf &amp; pollen, <b>WT and CENH3ox</b>, both haplotypes (col → its genotype's Col assembly, ler → Ler-HiFi; winnowmap). Candidate reads
 (de≥0.005 ∨ NM≥50 ∨ SA) were scanned at the <b>single-molecule</b> level by two complementary detectors that
 share Sniffles2's own topology classifier (<code>sv.classify_splits</code>, run per-read with no min-support):
 (1) <b>CIGAR + split-read leadprov</b> and (2) <b>split-and-map</b> (re-map of substitution-contrast-split fragments).
@@ -510,10 +516,11 @@ CENH3ox than WT</b>. Because coverage differs, all comparisons are per read-Mb.<
 By type: {', '.join(f'{t} {by_type[t]}' for t in TYPES if by_type[t])}.
 {('CEN178 in-register (whole-monomer indels): %d/%d (%.1f%%).' % (sum(inph), len(inph), 100*sum(inph)/max(len(inph),1))) if inph else ''}</div>
 <h2>0. Dataset at a glance</h2>
-<p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi, <b>WT and CENH3ox</b>. Reads are haplotype-split and
-mapped to each parental assembly (Col-HiFi, Ler-HiFi; CENH3ox uses the same references). The centromere windows total ≈11.5 Mb
-per assembly across the 5 chromosomes (CEN178 satellite, 178-bp monomer). Only reads anchored in those windows are analysed.
-"Candidate reads" pass the divergence/split gate; each SV call below comes from one read.</p>
+<p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi, <b>WT and CENH3ox</b>. Reads are haplotype-split; the
+col haplotype is mapped to its <b>own genotype's</b> Col assembly (WT→Col-HiFi, CENH3ox→CENH3ox-Col-HiFi) and the ler haplotype
+to Ler-HiFi (see the reference box above). The centromere windows span the CEN178 satellite (178-bp monomer) on the 5
+chromosomes. Only reads anchored in those windows are analysed. "Candidate reads" pass the divergence/split gate; each SV call
+below comes from one read.</p>
 {glance}
 <h2>1. Calls by type &amp; group (raw counts)</h2>{im(f1, 'Raw single-molecule SV counts per genotype×tissue (haps pooled). Depth differs between groups (leaf ~500×, pollen ~30×; WT vs CENH3ox also differ), so raw counts are NOT comparable — see §2.')}
 <h2>2. Read-Mb-normalized rate — WT vs CENH3ox</h2>

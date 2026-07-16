@@ -5,7 +5,7 @@ read if  de >= 0.005  OR  NM >= 50  OR  it has an SA tag.
 -> results/candidates/{sample}_{hap}.tsv  (qname chrom pos de nm has_sa)
 Run with nextflow_env python (pysam)."""
 import os, pysam
-from common import SAMPLES, HAPS, CEN, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, bam_path, OUT, refkey
 
 DE_MIN = 0.005
 NM_MIN = 50
@@ -19,7 +19,7 @@ def main():
             n_seen = n_cand = 0
             with open(f"{od}/{sample}_{hap}.tsv", "w") as out:
                 out.write("qname\tchrom\tpos\tde\tnm\thas_sa\n")
-                for chrom, (a, b) in CEN[hap].items():
+                for chrom, (a, b) in CEN[refkey(sample, hap)].items():
                     for r in bam.fetch(chrom, a, b):
                         if r.is_unmapped or r.is_secondary or r.is_supplementary:
                             continue

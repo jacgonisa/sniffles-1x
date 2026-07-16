@@ -18,7 +18,7 @@ from types import SimpleNamespace
 sys.path.insert(0, "/home/jg2070/miniforge3/envs/nextflow_env/lib/python3.13/site-packages")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN, REF, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, REF, bam_path, OUT, refkey
 
 CFG = SimpleNamespace(minsvlen_screen=50, long_ins_length=2500,
                       bnd_min_split_length=1000, dev_seq_cache_maxlen=0)
@@ -81,7 +81,7 @@ def extract(sample, hap):
     os.makedirs(f"{OUT}/splitmap", exist_ok=True)
     idx = 0
     with open(fa, "w") as out:
-        for chrom, (a, b) in CEN[hap].items():
+        for chrom, (a, b) in CEN[refkey(sample, hap)].items():
             for r in bam.fetch(chrom, a, b):
                 if r.is_secondary or r.is_supplementary or r.is_unmapped:
                     continue
@@ -104,8 +104,8 @@ def extract(sample, hap):
     return fa, meta
 
 
-def remap(fa, hap):
-    ref, rep = REF[hap]
+def remap(fa, rk):
+    ref, rep = REF[rk]
     bam = fa.replace(".fa", ".bam")
     cmd = (f"{WIN} -W {rep} -ax map-pb -t {THREADS} {ref} {fa} 2>/dev/null "
            f"| {ST} sort -@4 -o {bam} - && {ST} index {bam}")
@@ -146,7 +146,8 @@ def classify(sample, hap, tis, meta, frag_bam, out):
                     svlen = ""; mate = f"{arg.mate_contig}:{arg.mate_ref_start}"
                 else:
                     svlen = arg; mate = ""
-                a, b = CEN[hap][main_contig] if main_contig in CEN[hap] else (0, 0)
+                cen = CEN[refkey(sample, hap)]
+                a, b = cen[main_contig] if main_contig in cen else (0, 0)
                 if a <= svstart < b:
                     mq = min(A.mapping_quality, B.mapping_quality)
                     out.write(f"{sample}\t{hap}\t{tis}\t{main_contig}\t{svstart}\t{svtype}\t{svlen}\tSPLITMAP\t{mq}\t{qname}\t{mate}\n")
@@ -167,7 +168,7 @@ def main():
             fa, meta = extract(sample, hap)
             if not meta:
                 continue
-            frag_bam = remap(fa, hap)
+            frag_bam = remap(fa, refkey(sample, hap))
             classify(sample, hap, tis, meta, frag_bam, out)
     out.close(); print("DONE_SPLITMAP")
 

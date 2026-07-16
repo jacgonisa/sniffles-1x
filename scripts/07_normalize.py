@@ -7,7 +7,7 @@ alignments of aligned-bp overlapping the CEN window), in Mb. Rate = calls per Mb
 Run with nextflow_env python."""
 import csv, pysam
 from collections import defaultdict
-from common import SAMPLES, HAPS, CEN, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, bam_path, OUT, refkey
 
 
 def cen_mapped_mb():
@@ -17,7 +17,7 @@ def cen_mapped_mb():
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
             bp = 0
-            for chrom, (a, b) in CEN[hap].items():
+            for chrom, (a, b) in CEN[refkey(sample, hap)].items():
                 for r in bam.fetch(chrom, a, b):
                     if r.is_unmapped or r.is_secondary or r.is_supplementary:
                         continue

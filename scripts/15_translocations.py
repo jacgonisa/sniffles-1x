@@ -10,10 +10,10 @@ locus is in the `mate` column (mate_contig:mate_ref_start). We categorize each m
 Run with nextflow_env python."""
 import csv
 from collections import Counter
-from common import CEN, OUT, GROUPS
+from common import CEN, OUT, GROUPS, refkey
 
 
-def cat(hap, mate):
+def cat(rk, mate):
     if not mate or ":" not in mate:
         return "none"
     mc, mp = mate.rsplit(":", 1)
@@ -21,8 +21,8 @@ def cat(hap, mate):
         mp = int(mp)
     except ValueError:
         return "none"
-    if mc in CEN[hap]:
-        a, b = CEN[hap][mc]
+    if mc in CEN[rk]:
+        a, b = CEN[rk][mc]
         return "other_CEN" if a <= mp < b else "other_chrom_arm"
     return "unplaced_organellar"
 
@@ -32,7 +32,7 @@ def main():
     for r in csv.DictReader(open(f"{OUT}/sm_sv_calls.tsv"), delimiter="\t"):
         if r["svtype"] != "BND":
             continue
-        c = cat(r["hap"], r.get("mate", ""))
+        c = cat(refkey(r["sample"], r["hap"]), r.get("mate", ""))
         out.append({"sample": r["sample"], "hap": r["hap"], "tissue": r["tissue"],
                     "chrom": r["chrom"], "pos": r["pos"], "mate": r.get("mate", ""),
                     "category": c, "methods": r["methods"], "mapq": r["mapq"], "read": r["read"]})

@@ -15,27 +15,26 @@ import pysam
 sm = importlib.import_module("03_split_and_map")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN, REF, GROUPS, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, REF, CHRLEN, GROUPS, bam_path, OUT, refkey
 
-CHRLEN = {"col": {"Chr1": 32640075, "Chr2": 23012915, "Chr3": 26150667, "Chr4": 22582341, "Chr5": 30170985},
-          "ler": {"Chr1": 32485061, "Chr2": 21328600, "Chr3": 27335240, "Chr4": 22700724, "Chr5": 30661135}}
 ARM_BUFFER = 5_000_000; ARM_WIN = 3_000_000
 DE_MIN = 0.005; NM_MIN = 50
 TYPES = ["DEL", "INS", "DUP", "INV", "BND"]
 _DUMMY = sm._Dummy()
 
 
-def arm_windows(hap):
+def arm_windows(rk):
     w = {}
-    for chrom, (a, b) in CEN[hap].items():
-        s = b + ARM_BUFFER; e = min(s + ARM_WIN, CHRLEN[hap][chrom] - 100_000)
+    for chrom, (a, b) in CEN[rk].items():
+        s = b + ARM_BUFFER; e = min(s + ARM_WIN, CHRLEN[rk][chrom] - 100_000)
         if e - s > 200_000:
             w[chrom] = (s, e)
     return w
 
 
 def run_one(sample, hap, td):
-    wins = arm_windows(hap)
+    rk = refkey(sample, hap)
+    wins = arm_windows(rk)
     bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
     fa = os.path.join(td, f"{sample}_{hap}.fa"); meta = {}; idx = 0; arm_reads = 0
     with open(fa, "w") as out:
@@ -62,7 +61,7 @@ def run_one(sample, hap, td):
     bam.close()
     if idx == 0:
         return arm_reads, Counter()
-    ref, rep = REF[hap]; frag_bam = fa.replace(".fa", ".bam")
+    ref, rep = REF[rk]; frag_bam = fa.replace(".fa", ".bam")
     subprocess.run(f"{sm.WIN} -W {rep} -ax map-pb -t {sm.THREADS} {ref} {fa} 2>/dev/null | "
                    f"{sm.ST} sort -@4 -o {frag_bam} - && {sm.ST} index {frag_bam}",
                    shell=True, check=True, executable="/bin/bash")

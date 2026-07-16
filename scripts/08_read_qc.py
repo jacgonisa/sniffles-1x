@@ -11,7 +11,7 @@ equal-or-better quality, so the higher pollen per-Mb SV rate is not a quality ar
 Run with nextflow_env python."""
 import pysam, statistics as st, sys
 sys.path.insert(0, "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/scripts")
-from common import SAMPLES, HAPS, CEN, bam_path, OUT
+from common import SAMPLES, HAPS, CEN, bam_path, OUT, ROOT
 
 SRC = {"wt_leaf": "/mnt/ssd-4tb/HIFI_NAMIL/01_f1leaf-wt/data/WT_leaf.hifi_reads.bam",
        "wt_pollen": "/mnt/ssd-4tb/HIFI_NAMIL/03_f1pollen-wt/03_F1pollen_WT-1/data/WT_pollen.hifi_reads.bam",
@@ -56,7 +56,9 @@ def main():
     rows = []
     for sample, tis in SAMPLES:
         for hap in HAPS:
-            bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
+            # QC is a read property (error/length/passes) → always read from the original
+            # full-genome WT-ref BAM (has the distal arms), not the CEN-only re-mapped BAM.
+            bam = pysam.AlignmentFile(f"{ROOT}/sv_calling/aligned/{sample}/strict90/{hap}_all.bam", "rb")
             de_arm, _ = de_len(bam, ARM)
             de_cen, ln_cen = de_len(bam, [(c, a, b) for c, (a, b) in CEN[hap].items()])
             bam.close()

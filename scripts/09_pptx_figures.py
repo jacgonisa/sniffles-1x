@@ -20,7 +20,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
-from common import SAMPLES, HAPS, CEN, GROUPS, bam_path, OUT, MONO
+from common import SAMPLES, HAPS, CEN, GROUPS, bam_path, OUT, MONO, refkey
 
 FIGDIR = f"{OUT}/figures"; os.makedirs(FIGDIR, exist_ok=True)
 HTML = "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/figures_pptx.html"
@@ -67,7 +67,7 @@ def cen_read_counts():
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
             n = 0
-            for chrom, (a, b) in CEN[hap].items():
+            for chrom, (a, b) in CEN[refkey(sample, hap)].items():
                 for r in bam.fetch(chrom, a, b):
                     if r.is_unmapped or r.is_secondary or r.is_supplementary:
                         continue
