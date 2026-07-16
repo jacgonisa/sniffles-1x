@@ -501,8 +501,10 @@ table{{border-collapse:collapse;margin:10px 0;font-size:14px}}td,th{{border:1px 
 <h1>Single-molecule structural variants in the centromere — WT vs CENH3ox, F1 (Col×Ler)</h1>
 <div class=box style="background:#FEF9E7;border-left:4px solid #B7950B"><b>Reference design (important).</b> Each genotype's reads
 are mapped to its <b>own centromere baseline</b>, so a call is a somatic deviation from that genotype's assembly — not the
-fixed Col-vs-CENH3ox remodelling. WT col → Col-HiFi; <b>CENH3ox col → the CENH3ox line's own assembly (CENH3ox-Col-HiFi)</b>;
-both ler haplotypes → Ler-HiFi (no CENH3ox-Ler assembly exists — the remodelled centromere is the Col one, where CENH3 acts).
+fixed Col-vs-CENH3ox remodelling. The CENH3ox line is <b>CENH3ox-Col × WT-Ler</b>: its Col haplotype carries the remodelled centromere, its Ler haplotype is
+<b>wild-type Ler</b>. So WT col → Col-HiFi; <b>CENH3ox col → the CENH3ox line's own assembly (CENH3ox-Col-HiFi)</b>; and
+<b>both ler haplotypes → Ler-HiFi, which is the correct baseline for each</b> (the CENH3ox Ler haplotype is genetically WT Ler).
+A CENH3ox Ler signal above WT is therefore a <b>trans</b> effect of CENH3 overexpression on the unmodified Ler centromere.
 CENH3ox col reads are the winnowmap <code>-ax map-pb --MD</code> alignments to the CENH3ox col-parent assembly
 (<code>sv_calling/aligned_matched/</code>), the same reads as the WT-ref col mapping, just against the CENH3ox baseline.</div>
 <p>Leaf &amp; pollen, <b>WT and CENH3ox</b>, both haplotypes (col → its genotype's Col assembly, ler → Ler-HiFi; winnowmap). Candidate reads
