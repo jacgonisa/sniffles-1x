@@ -14,6 +14,7 @@ import os, sys, csv, subprocess, tempfile
 sys.path.insert(0, "/mnt/ssd-4tb/HIFI_NAMIL/insertion_origin/scripts")
 import pysam
 import plot_validation_prototype as pv
+import insplot
 from common import OUT, REF, CEN, bam_path, refkey
 
 MINIMAP2 = "/home/jg2070/minimap2/minimap2"
@@ -105,8 +106,9 @@ def main():
         ev = {"ref_pos": pos, "ins_size": size, "chrom": chrom, "label": label,
               "call": f"{s} {h}", "dataset": s, "haplotype": h}
         print(f"  {label}: {chrom}:{pos} {size}bp, {len(hits)} origin hits")
-        pv.draw_event(ev, rd["seq"], rd["quals"] or None, rd["rq"], rd["np"],
-                      rd["cigar"], hits, db)
+        out_png = os.path.join(OUTDIR, f"{s}_{h}_{label}.png")
+        insplot.draw_event_trash(ev, rd["seq"], rd["quals"] or None, rd["rq"], rd["np"],
+                                 rd["cigar"], hits, db, out_png)
     print(f"DONE_INSORIGIN_DETAILED -> {OUTDIR}/")
 
 
