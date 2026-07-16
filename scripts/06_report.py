@@ -84,17 +84,19 @@ def fig_interaction(rates):
     perhap = {(r["sample"], r["hap"]): float(r["ALL_per_mb"]) for r in rates}
     fig, ax = plt.subplots(figsize=(6.6, 4.6))
     X = {"leaf": 0, "pollen": 1}
+    HAPMARK = {"col": "o", "ler": "^"}       # col = circle, ler = triangle
     for geno, col in (("wt", "#2980B9"), ("cenh3ox", "#C0392B")):
         gs = [g for g in GROUPS if g.startswith(geno)]
         ys = [grate[g] for g in gs]
         xs = [X["leaf" if "leaf" in g else "pollen"] for g in gs]
-        ax.plot(xs, ys, "-o", color=col, lw=2.6, ms=9, zorder=3,
+        ax.plot(xs, ys, "-", color=col, lw=2.6, zorder=3,
                 label=("WT" if geno == "wt" else "CENH3ox"))
+        ax.plot(xs, ys, "D", color=col, ms=9, zorder=4)   # pooled value = diamond
         for g in gs:
             xx = X["leaf" if "leaf" in g else "pollen"]
             for h in ("col", "ler"):
                 if (g, h) in perhap:
-                    ax.plot(xx, perhap[(g, h)], "o", color=col, ms=5, alpha=0.35, zorder=2)
+                    ax.plot(xx, perhap[(g, h)], HAPMARK[h], color=col, ms=6, alpha=0.5, zorder=2)
             ax.annotate(f"{grate[g]:.2f}", (xx, grate[g]), (xx + 0.03, grate[g] + 0.06),
                         fontsize=9, color=col, fontweight="bold")
     # fold annotations
@@ -103,10 +105,17 @@ def fig_interaction(rates):
         ax.annotate(f"pollen/leaf = {gp/max(gl,1e-9):.1f}×", (0.5, (gl + gp) / 2 + yo),
                     ha="center", fontsize=8.5, color=col, style="italic")
     ax.set_xticks([0, 1]); ax.set_xticklabels(["leaf", "pollen"], fontsize=11)
-    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.35)
+    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.45)
     ax.set_ylim(0, max(grate.values()) * 1.2)
-    ax.legend(title="genotype", fontsize=10)
-    ax.set_title("Genotype × tissue: CENH3ox lifts the leaf (somatic) rate most\n(faint dots = col/ler haplotypes)")
+    leg1 = ax.legend(title="genotype", fontsize=10, loc="center right")
+    ax.add_artist(leg1)
+    from matplotlib.lines import Line2D
+    shape_handles = [Line2D([0], [0], marker="D", color="#666", lw=0, ms=8, label="both (pooled)"),
+                     Line2D([0], [0], marker="o", color="#666", lw=0, ms=7, label="col haplotype"),
+                     Line2D([0], [0], marker="^", color="#666", lw=0, ms=7, label="ler haplotype")]
+    ax.legend(handles=shape_handles, title="marker", fontsize=9, loc="lower right")
+    ax.set_title("Genotype × tissue: CENH3ox lifts the leaf (somatic) rate most\n"
+                 "(diamond = pooled · ○ col · △ ler)")
     fig.savefig(f"{OUT}/figures/rate_interaction.png", dpi=140, bbox_inches="tight")  # standalone for slides
     return png(fig)
 
