@@ -329,6 +329,17 @@ real translocations; {catc.get('unplaced_organellar',0)} hit unplaced/organellar
                 m = [p for p in expngs if f"_{d['chrom']}_{d['pos']}." in p]
                 expick += m[:1]; break
         panels = "".join(iimg(p, os.path.basename(p)[:-4]) for p in expick)
+        # detailed split-read + dotplot + quality/readmer panels (step 21)
+        dpngs = sorted(_g2.glob(f"{OUT}/insertion_origin_detailed/*.png"))
+        detailed = ""
+        if dpngs:
+            dp = "".join(iimg(p, os.path.basename(p)[:-4]) for p in dpngs[:2])
+            detailed = (f"<h3>14b. Detailed read view — split-read origin · self-similarity dotplot · CCS-quality &amp; k-mer readmer</h3>"
+                        f"<p>Per read: the <b>split-read alignment</b> (top bar = where the inserted fragment maps back = origin; "
+                        f"middle = the read, blue flanks + red insertion; bottom bar = flanks), the <b>self-similarity dotplot</b> "
+                        f"(off-diagonal bands = the internal tandem repeat structure of the inserted copy), and per-base <b>CCS quality</b> "
+                        f"+ <b>KMC readmer</b> (dataset k-mer support: high = real/repeated sequence, 1 = sequencing error). "
+                        f"Full set: <code>results/insertion_origin_detailed/</code>.</p>{dp}")
         trows = "".join(
             f"<tr><td>{GLAB.get(d['sample'],d['sample'])}</td><td>{d['hap']}</td><td>{d['chrom']}:{int(d['pos']):,}</td>"
             f"<td>{d['ins_bp']}</td><td>{d['origin_category'].replace('_',' ')}</td><td>{d['n_hits']}</td>"
@@ -344,7 +355,8 @@ different chromosome. So these centromeric insertions are <b>locally templated</
 {summ}
 {panels}
 <table><tr><th>group</th><th>hap</th><th>insertion site</th><th>size (bp)</th><th>origin</th><th>#hits</th><th>best id</th><th>donor distance</th></tr>{trows}</table>
-<p class=cap style="font-size:12.5px;color:#666">Full set of per-event panels: <code>results/insertion_origin/</code>.</p>"""
+<p class=cap style="font-size:12.5px;color:#666">Full set of per-event panels: <code>results/insertion_origin/</code>.</p>
+{detailed}"""
 
     # CEN vs ARM control (step 16)
     armc = ""
