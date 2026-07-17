@@ -105,15 +105,16 @@ def fig_interaction(rates):
         ax.annotate(f"pollen/leaf = {gp/max(gl,1e-9):.1f}×", (0.5, (gl + gp) / 2 + yo),
                     ha="center", fontsize=8.5, color=col, style="italic")
     ax.set_xticks([0, 1]); ax.set_xticklabels(["leaf", "pollen"], fontsize=11)
-    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.45)
+    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.25)
     ax.set_ylim(0, max(grate.values()) * 1.2)
-    leg1 = ax.legend(title="genotype", fontsize=10, loc="center right")
+    # both legends OUTSIDE the axes (to the right) so they never cover points
+    leg1 = ax.legend(title="genotype", fontsize=9.5, loc="upper left", bbox_to_anchor=(1.02, 1.0))
     ax.add_artist(leg1)
     from matplotlib.lines import Line2D
     shape_handles = [Line2D([0], [0], marker="D", color="#666", lw=0, ms=8, label="both (pooled)"),
                      Line2D([0], [0], marker="o", color="#666", lw=0, ms=7, label="col haplotype"),
                      Line2D([0], [0], marker="^", color="#666", lw=0, ms=7, label="ler haplotype")]
-    ax.legend(handles=shape_handles, title="marker", fontsize=9, loc="lower right")
+    ax.legend(handles=shape_handles, title="marker", fontsize=9, loc="lower left", bbox_to_anchor=(1.02, 0.0))
     ax.set_title("Genotype × tissue: CENH3ox lifts the leaf (somatic) rate most\n"
                  "(diamond = pooled · ○ col · △ ler)")
     fig.savefig(f"{OUT}/figures/rate_interaction.png", dpi=140, bbox_inches="tight")  # standalone for slides
