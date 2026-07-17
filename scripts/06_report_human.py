@@ -111,9 +111,11 @@ figure{{text-align:center;margin:14px 0}}figcaption{{font-size:12.5px;color:#666
 table{{border-collapse:collapse;margin:10px 0;font-size:14px}}td,th{{border:1px solid #ddd;padding:4px 10px}}
 .box{{background:#EBF5FB;border-left:4px solid #3498DB;padding:10px 15px;margin:12px 0}}</style>
 <h1>Single-molecule structural variants — HG002 sperm (genome-wide)</h1>
-<p>The cracked Sniffles2 per-read caller (candidate → CIGAR/split-read leadprov + split-and-remap → unmodified
+<p>The cracked Sniffles2 per-read caller (candidate → <b>CIGAR + split-read (SA) leadprov</b> → unmodified
 <code>sv.classify_splits</code>, no clustering) run <b>genome-wide</b> on merged BLS0005+BLS0006 sperm HiFi, haplotype-split
-(strict-90) MAT + PAT, each mapped to its own HG002 assembly. Split-and-remap is restricted to alpha-satellite CEN.</p>
+(strict-90) MAT + PAT, each mapped to its own HG002 assembly. <i>Note:</i> the split-and-remap detector is deferred for
+human — re-mapping fragments requires re-loading the 6 Gb genome per call (impractical); a pre-built minimap2 index would
+enable it. So these calls are the CIGAR + native split-read routes only.</p>
 <div class=box><b>{n}</b> single-molecule SV calls — MAT {by_hap['MAT']}, PAT {by_hap['PAT']}.
 By type: {', '.join(f'{t} {by_type[t]}' for t in TYPES if by_type[t])}.
 In alpha-satellite CEN: {sum(incen.values())} ({100*sum(incen.values())//max(n,1)}%).
