@@ -281,6 +281,32 @@ def main():
         return (f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
                 f'<figcaption>{cap}</figcaption></figure>') if b else ""
 
+    # Method — the cracked Sniffles2 single-molecule pipeline (diagrams from docs/)
+    DOCS = os.path.join(os.path.dirname(OUT), "docs")
+    def dimg(name, cap, w="88%"):
+        b = file_b64(f"{DOCS}/{name}.png")
+        return (f'<figure><img style="max-width:{w}" src="data:image/png;base64,{b}">'
+                f'<figcaption>{cap}</figcaption></figure>') if b else ""
+    method = f"""<h2>Method — single-molecule SV calling by "cracking" Sniffles2 (hybrid CIGAR + split-and-remap)</h2>
+<p>Sniffles2 normally needs ≥2 reads, but that requirement lives only in its <b>clustering / QC</b> stages — its per-read
+<b>signal extraction and topology classifier are inherently single-read</b>. We <b>import</b> Sniffles2 (v2.7.5, unmodified) and
+call its own <code>sv.classify_splits</code> per read, <b>skipping the ≥2-read stages</b>, so every read yields a call (1×).
+Two complementary detectors feed the same classifier:</p>
+<ul>
+<li><b>(1) CIGAR + split-read (leadprov)</b> — inline insertions/deletions (<code>I</code>/<code>D</code> ≥ 50 bp) in a single
+alignment, plus the aligner's own split-read (<code>SA</code>) alignments. This is Sniffles' native logic, per read.</li>
+<li><b>(2) Split-and-remap</b> — for reads that stay one linear alignment but whose second half is a run of mismatches (a
+satellite event mapped out of phase), we find the breakpoint (CUSUM change-point on the per-base mismatch profile), <b>cut the
+read there and re-map both halves with winnowmap</b>, then classify the two fragments. Catches events the CIGAR/SA miss.</li>
+</ul>
+<p>Both routes end in the <b>same unmodified</b> <code>sv.classify_splits</code>, which reads Part1/Part2 strand + reference/query
+coordinates to assign DEL / DUP / INV / INS / BND. No clustering, no min-support ⇒ <b>one lead = one single-molecule SV</b>.</p>
+{dimg('algorithm_flow', 'The hybrid pipeline: a candidate read (de≥0.005 ∨ NM≥50 ∨ SA) is scanned by both detectors, which share Sniffles2’s per-read classifier; the ≥2-read clustering/QC stages are skipped so each read gives a call.')}
+{dimg('topology', 'How sv.classify_splits infers the SV type from the two fragments’ strand and reference/query-gap topology (same rules for both detectors).', '70%')}
+<div class=box>Empirically, stock Sniffles2 forced to <code>--minsupport 1 --mosaic</code> still emits only ~3–6 calls per sample
+in these centromeres (its clustering discards isolated single-read signal), whereas this per-read approach recovers thousands —
+which is exactly why the single-molecule adaptation is needed. Full write-up: <code>ALGORITHM.md</code>.</div>"""
+
     # translocations (BND) section (step 15)
     transloc = ""
     tp = f"{OUT}/translocations.tsv"
@@ -623,6 +649,7 @@ CENH3ox than WT</b>. Because coverage differs, all comparisons are per read-Mb.<
 <b>Per read-Mb</b>: {', '.join(f"{GLAB[g]} {grate[g]:.2f}" for g in GROUPS)} calls/Mb.
 By type: {', '.join(f'{t} {by_type[t]}' for t in TYPES if by_type[t])}.
 {('CEN178 in-register (whole-monomer indels): %d/%d (%.1f%%).' % (sum(inph), len(inph), 100*sum(inph)/max(len(inph),1))) if inph else ''}</div>
+{method}
 <h2>0. Dataset at a glance</h2>
 <p><i>Arabidopsis thaliana</i> F1 hybrid (Col-0 × Ler-0), PacBio HiFi, <b>WT and CENH3ox</b>. Reads are haplotype-split; the
 col haplotype is mapped to its <b>own genotype's</b> Col assembly (WT→Col-HiFi, CENH3ox→CENH3ox-Col-HiFi) and the ler haplotype
