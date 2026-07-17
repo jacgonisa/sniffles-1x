@@ -18,11 +18,12 @@ from types import SimpleNamespace
 sys.path.insert(0, "/home/jg2070/miniforge3/envs/nextflow_env/lib/python3.13/site-packages")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN_IV, REF, bam_path_md, OUT, refkey, in_cen
+from common import SAMPLES, HAPS, CEN_IV, REF, MMI, GENOME, bam_path_md, OUT, refkey, in_cen
 
 CFG = SimpleNamespace(minsvlen_screen=50, long_ins_length=2500,
                       bnd_min_split_length=1000, dev_seq_cache_maxlen=0)
 WIN = "/home/jg2070/miniforge3/envs/nextflow_env/bin/winnowmap"
+MM2 = "/home/jg2070/minimap2/minimap2"
 ST = "/home/jg2070/miniforge3/envs/nextflow_env/bin/samtools"
 THREADS = 16
 MIN_FRAG = 1000          # each fragment >= 1 kb
@@ -108,10 +109,14 @@ def extract(sample, hap):
 
 
 def remap(fa, rk):
-    ref, rep = REF[rk]
     bam = fa.replace(".fa", ".bam")
-    cmd = (f"{WIN} -W {rep} -ax map-pb -t {THREADS} {ref} {fa} 2>/dev/null "
-           f"| {ST} sort -@4 -o {bam} - && {ST} index {bam}")
+    if GENOME == "human":
+        # minimap2 against a prebuilt .mmi (fast load; winnowmap re-indexes the 6 Gb genome per call)
+        aln = f"{MM2} -ax map-hifi -t {THREADS} {MMI[rk]} {fa}"
+    else:
+        ref, rep = REF[rk]
+        aln = f"{WIN} -W {rep} -ax map-pb -t {THREADS} {ref} {fa}"
+    cmd = f"{aln} 2>/dev/null | {ST} sort -@4 -o {bam} - && {ST} index {bam}"
     subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
     return bam
 

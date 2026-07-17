@@ -59,6 +59,9 @@ if GENOME == "human":
     _A = f"{HROOT}/data/assembly/annotation/cen_arms"
     REF = {"MAT": (f"{_G}/MAT.fasta", f"{_G}/mat_repetitive_k15.txt"),
            "PAT": (f"{_G}/PAT.fasta", f"{_G}/pat_repetitive_k15.txt")}
+    # prebuilt minimap2 indexes — split-and-remap uses minimap2 (fast load) not winnowmap
+    # (winnowmap re-indexes the 6 Gb genome per call). Built by: minimap2 -x map-hifi -d.
+    MMI = {"MAT": f"{_G}/MAT.map-hifi.mmi", "PAT": f"{_G}/PAT.map-hifi.mmi"}
     CHRLEN = {"MAT": _fai_lengths(f"{_G}/MAT.fasta.fai"),
               "PAT": _fai_lengths(f"{_G}/PAT.fasta.fai")}
     CEN_IV = {"MAT": _bed_intervals(f"{_A}/hg002v1.1.MAT.alpha_CEN.bed"),
@@ -116,6 +119,7 @@ else:  # ---- arabidopsis (default) ----
         "ler": {"Chr1": 32485061, "Chr2": 21328600, "Chr3": 27335240, "Chr4": 22700724, "Chr5": 30661135},
         "cenh3ox_col": {"Chr1": 32376493, "Chr2": 22314084, "Chr3": 26166303, "Chr4": 22192233, "Chr5": 30119503},
     }
+    MMI = {}   # arabidopsis uses winnowmap for the split-and-remap
     # centromere-restricted: iterate the CEN windows themselves
     SCAN = {rk: [(c, a, b) for c, (a, b) in d.items()] for rk, d in CEN.items()}
     CEN_IV = {rk: {c: [iv] for c, iv in d.items()} for rk, d in CEN.items()}
