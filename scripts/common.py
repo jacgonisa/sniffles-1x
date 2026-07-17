@@ -47,9 +47,13 @@ if GENOME == "human":
     def refkey(sample, hap):
         return hap                           # each haplotype -> its own MAT/PAT assembly
 
-    def bam_path(sample, hap):
-        return (f"{HROOT}/sv_calling/strict90_sniffles1x_BLS0005_BLS0006/bam/"
-                f"{sample}.{hap}.strict90.merged.md.bam")   # calmd'd (MD tags added), see prep_human_md.sh
+    _HBD = f"{HROOT}/sv_calling/strict90_sniffles1x_BLS0005_BLS0006/bam"
+
+    def bam_path(sample, hap):                # full genome-wide BAM (no MD) — 01/02/07/23
+        return f"{_HBD}/{sample}.{hap}.strict90.merged.bam"
+
+    def bam_path_md(sample, hap):             # CEN-only calmd'd BAM (has MD) — 03 split-and-map
+        return f"{_HBD}/{sample}.{hap}.strict90.cen.md.bam"   # built by prep_human_md.sh
 
     _G = f"{HROOT}/data/assembly/genomes"
     _A = f"{HROOT}/data/assembly/annotation/cen_arms"
@@ -60,7 +64,10 @@ if GENOME == "human":
     CEN_IV = {"MAT": _bed_intervals(f"{_A}/hg002v1.1.MAT.alpha_CEN.bed"),
               "PAT": _bed_intervals(f"{_A}/hg002v1.1.PAT.alpha_CEN.bed")}
     CEN = CEN_IV                              # overlay only (genome-wide scan)
-    SCAN = {rk: [(c, 0, L) for c, L in CHRLEN[rk].items()] for rk in HAPS}
+    # each haplotype BAM is a competitive-mapping diploid; scan only that haplotype's own
+    # chromosomes (MAT->*_MATERNAL, PAT->*_PATERNAL) — the intended reads, half the compute.
+    _TAG = {"MAT": "MATERNAL", "PAT": "PATERNAL"}
+    SCAN = {rk: [(c, 0, L) for c, L in CHRLEN[rk].items() if _TAG[rk] in c] for rk in HAPS}
 
     def in_phase(svlen):                      # register not defined for human
         return (False, abs(svlen))
@@ -84,6 +91,9 @@ else:  # ---- arabidopsis (default) ----
         if sample.startswith("cenh3ox") and hap == "col":
             return f"{ROOT}/sv_calling/aligned/{sample}/strict90/col_cenh3oxref.bam"
         return f"{ROOT}/sv_calling/aligned/{sample}/strict90/{hap}_all.bam"
+
+    def bam_path_md(sample, hap):             # Arabidopsis BAMs already carry MD
+        return bam_path(sample, hap)
 
     REF = {
         "col": (f"{ROOT}/01_genomes/Col-HiFi/Col-0.ragtag_scaffolds_with_organellar.fa",

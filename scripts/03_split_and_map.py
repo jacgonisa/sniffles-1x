@@ -18,7 +18,7 @@ from types import SimpleNamespace
 sys.path.insert(0, "/home/jg2070/miniforge3/envs/nextflow_env/lib/python3.13/site-packages")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN_IV, REF, bam_path, OUT, refkey, in_cen
+from common import SAMPLES, HAPS, CEN_IV, REF, bam_path_md, OUT, refkey, in_cen
 
 CFG = SimpleNamespace(minsvlen_screen=50, long_ins_length=2500,
                       bnd_min_split_length=1000, dev_seq_cache_maxlen=0)
@@ -75,7 +75,7 @@ def extract(sample, hap):
         next(f)
         for ln in f:
             cand.add(ln.split("\t", 1)[0])
-    bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
+    bam = pysam.AlignmentFile(bam_path_md(sample, hap), "rb")
     fa = f"{OUT}/splitmap/{sample}_{hap}.frags.fa"
     meta = {}                              # idx -> (qname, chrom, qsplit, readlen)
     os.makedirs(f"{OUT}/splitmap", exist_ok=True)
