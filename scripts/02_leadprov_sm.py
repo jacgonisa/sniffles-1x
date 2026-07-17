@@ -17,7 +17,7 @@ from types import SimpleNamespace
 sys.path.insert(0, "/home/jg2070/miniforge3/envs/nextflow_env/lib/python3.13/site-packages")
 from sniffles import sv
 from sniffles.leadprov import Lead, CIGAR_analyze
-from common import SAMPLES, HAPS, CEN, bam_path, OUT, refkey
+from common import SAMPLES, HAPS, SCAN, bam_path, OUT, refkey
 
 # minimal config mirroring Sniffles defaults; only attrs classify_splits reads.
 # minsvlen_screen=50 -> the colleague's ">=50 bp" threshold (vs sniffles' 45).
@@ -77,7 +77,7 @@ def run():
         for hap in HAPS:
             bam = pysam.AlignmentFile(bam_path(sample, hap), "rb")
             n = 0
-            for chrom, (a, b) in CEN[refkey(sample, hap)].items():
+            for chrom, a, b in SCAN[refkey(sample, hap)]:
                 for r in bam.fetch(chrom, a, b):
                     if r.is_unmapped or r.is_secondary or r.is_supplementary:
                         continue

@@ -11,7 +11,7 @@ Concord : flag whether a stock-sniffles call of same type sits within 200 bp.
 """
 import os, glob, csv
 from collections import defaultdict
-from common import OUT, in_phase
+from common import OUT, in_phase, in_cen, refkey
 
 POS_DEDUP = 100
 POS_STOCK = 200
@@ -81,12 +81,13 @@ def main():
                 "pos": rep["pos"], "svtype": svtype, "svlen": rep["svlen"],
                 "methods": "+".join(methods),
                 "in_phase": int(ph) if rep["svlen"] else "", "monomer_rem": rem,
+                "in_cen": int(in_cen(refkey(sample, hap), rep["chrom"], rep["pos"])),
                 "mapq": rep["mapq"], "read": read, "mate": rep.get("mate", ""),
                 "stock_match": int(stock_hit(stock, (sample, hap), rep["chrom"], rep["pos"], svtype)),
             })
 
     cols = ["sample", "hap", "tissue", "chrom", "pos", "svtype", "svlen",
-            "methods", "in_phase", "monomer_rem", "mapq", "read", "mate", "stock_match"]
+            "methods", "in_phase", "monomer_rem", "in_cen", "mapq", "read", "mate", "stock_match"]
     with open(f"{OUT}/sm_sv_calls.tsv", "w") as out:
         out.write("\t".join(cols) + "\n")
         for m in sorted(merged, key=lambda r: (r["sample"], r["hap"], r["chrom"], r["pos"])):

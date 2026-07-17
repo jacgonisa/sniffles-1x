@@ -18,7 +18,7 @@ from types import SimpleNamespace
 sys.path.insert(0, "/home/jg2070/miniforge3/envs/nextflow_env/lib/python3.13/site-packages")
 from sniffles import sv
 from sniffles.leadprov import Lead
-from common import SAMPLES, HAPS, CEN, REF, bam_path, OUT, refkey
+from common import SAMPLES, HAPS, CEN_IV, REF, bam_path, OUT, refkey, in_cen
 
 CFG = SimpleNamespace(minsvlen_screen=50, long_ins_length=2500,
                       bnd_min_split_length=1000, dev_seq_cache_maxlen=0)
@@ -80,25 +80,28 @@ def extract(sample, hap):
     meta = {}                              # idx -> (qname, chrom, qsplit, readlen)
     os.makedirs(f"{OUT}/splitmap", exist_ok=True)
     idx = 0
+    # split-and-map is centromere-focused (out-of-phase satellite): iterate CEN intervals only,
+    # even when the rest of the pipeline scans genome-wide (bounds runtime on human).
     with open(fa, "w") as out:
-        for chrom, (a, b) in CEN[refkey(sample, hap)].items():
-            for r in bam.fetch(chrom, a, b):
-                if r.is_secondary or r.is_supplementary or r.is_unmapped:
-                    continue
-                if r.query_name not in cand or not (a <= r.reference_start < b):
-                    continue
-                seq = r.query_sequence
-                if seq is None or len(seq) < MIN_READLEN:
-                    continue
-                bs = best_split(r)
-                if bs is None:
-                    continue
-                qsplit, _c = bs
-                if qsplit < MIN_FRAG or len(seq) - qsplit < MIN_FRAG:
-                    continue
-                meta[idx] = (r.query_name, chrom, qsplit, len(seq))
-                out.write(f">{idx}_A\n{seq[:qsplit]}\n>{idx}_B\n{seq[qsplit:]}\n")
-                idx += 1
+        for chrom, ivs in CEN_IV[refkey(sample, hap)].items():
+            for a, b in ivs:
+                for r in bam.fetch(chrom, a, b):
+                    if r.is_secondary or r.is_supplementary or r.is_unmapped:
+                        continue
+                    if r.query_name not in cand or not (a <= r.reference_start < b):
+                        continue
+                    seq = r.query_sequence
+                    if seq is None or len(seq) < MIN_READLEN:
+                        continue
+                    bs = best_split(r)
+                    if bs is None:
+                        continue
+                    qsplit, _c = bs
+                    if qsplit < MIN_FRAG or len(seq) - qsplit < MIN_FRAG:
+                        continue
+                    meta[idx] = (r.query_name, chrom, qsplit, len(seq))
+                    out.write(f">{idx}_A\n{seq[:qsplit]}\n>{idx}_B\n{seq[qsplit:]}\n")
+                    idx += 1
     bam.close()
     print(f"{sample} {hap}: {idx} reads split -> {fa}")
     return fa, meta
@@ -146,9 +149,7 @@ def classify(sample, hap, tis, meta, frag_bam, out):
                     svlen = ""; mate = f"{arg.mate_contig}:{arg.mate_ref_start}"
                 else:
                     svlen = arg; mate = ""
-                cen = CEN[refkey(sample, hap)]
-                a, b = cen[main_contig] if main_contig in cen else (0, 0)
-                if a <= svstart < b:
+                if in_cen(refkey(sample, hap), main_contig, svstart):
                     mq = min(A.mapping_quality, B.mapping_quality)
                     out.write(f"{sample}\t{hap}\t{tis}\t{main_contig}\t{svstart}\t{svtype}\t{svlen}\tSPLITMAP\t{mq}\t{qname}\t{mate}\n")
                     n += 1

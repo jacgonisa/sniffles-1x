@@ -186,6 +186,30 @@ def fig_methods(rows):
     return png(fig)
 
 
+def fig_insqc(path):
+    """Insertion QC: q_contrast (flank-ins CCS Q) vs homopolymer fraction; flagged in red."""
+    if not os.path.exists(path):
+        return ""
+    rws = list(csv.DictReader(open(path), delimiter="\t"))
+    if not rws:
+        return ""
+    xf = [float(r["q_contrast"]) for r in rws]; yf = [float(r["hp_frac"]) for r in rws]
+    flag = [r["verdict"] == "FLAG" for r in rws]
+    fig, ax = plt.subplots(figsize=(8, 4.4))
+    for keep, csel, lab, z in ((False, "#95a5a6", "PASS", 1), (True, "#C0392B", "FLAG (dropped)", 3)):
+        xs = [x for x, fl in zip(xf, flag) if fl == keep]
+        ys = [y for y, fl in zip(yf, flag) if fl == keep]
+        ax.scatter(xs, ys, s=10, c=csel, alpha=0.5 if not keep else 0.8, linewidths=0, label=lab, zorder=z)
+    ax.axvline(5, color="#E67E22", ls="--", lw=1); ax.axhline(0.30, color="#8E44AD", ls="--", lw=1)
+    ax.text(5.2, 0.02, "Q-decay ≥5", color="#E67E22", fontsize=8)
+    ax.text(0.32, 0.31, "homopolymer >30%", color="#8E44AD", fontsize=8)
+    ax.set_xlabel("CCS quality contrast  (flank Q − insertion Q)")
+    ax.set_ylabel("homopolymer fraction of insertion")
+    ax.set_ylim(-0.03, 1.02); ax.legend(fontsize=9, loc="upper right")
+    ax.set_title("Insertion-sequence QC — low-complexity and quality-decay insertions flagged")
+    return png(fig)
+
+
 def fig_routes(path):
     """How many reads each detection route recovered (from source_breakdown.tsv)."""
     if not os.path.exists(path):
@@ -402,6 +426,34 @@ different chromosome. So these centromeric insertions are <b>locally templated</
 <table><tr><th>group</th><th>hap</th><th>insertion site</th><th>size (bp)</th><th>origin</th><th>#hits</th><th>best id</th><th>donor distance</th></tr>{trows}</table>
 <p class=cap style="font-size:12.5px;color:#666">Full set of per-event panels: <code>results/insertion_origin/</code>.</p>
 {detailed}"""
+
+    # insertion quality QC (step 23)
+    insqc = ""
+    iq = f"{OUT}/insertion_qc.tsv"
+    if os.path.exists(iq):
+        ql = list(csv.DictReader(open(iq), delimiter="\t"))
+        agg = defaultdict(lambda: [0, 0, 0, 0])   # group -> [INS, lowc, decay, flag]
+        for d in ql:
+            a = agg[d["sample"]]; a[0] += 1
+            a[1] += int(d["low_complexity"]); a[2] += int(d["quality_decay"]); a[3] += (d["verdict"] == "FLAG")
+        qrow = "".join(
+            f"<tr><td>{GLAB.get(g, g)}</td><td>{agg[g][0]}</td><td>{agg[g][1]}</td><td>{agg[g][2]}</td>"
+            f"<td><b>{agg[g][3]}</b> ({100*agg[g][3]//max(agg[g][0],1)}%)</td></tr>"
+            for g in GROUPS if g in agg)
+        nflag = sum(a[3] for a in agg.values()); nins = sum(a[0] for a in agg.values())
+        insqc = f"""<h2>15. Insertion-sequence quality QC (homopolymer &amp; CCS base-quality)</h2>
+<p>Some 1× insertions are artefactual: the inserted bases are a low-complexity <b>homopolymer tract</b>, and/or the
+<b>CCS base quality collapses inside the insertion</b> relative to its flanks (real inserted sequence should be as high-quality
+as the surrounding read). For every CIGAR insertion we cut out the inserted bases and their per-base CCS qualities and measure
+(i) the <b>homopolymer fraction</b> (bases in runs ≥5 bp) and Shannon entropy, and (ii) the <b>quality contrast</b> = mean Q of
+the ±200 bp flanks − mean Q of the insertion. We flag <b>low-complexity</b> (homopolymer &gt;30% or entropy &lt;1.2 bits) and
+<b>quality-decay</b> (insertion ≥5 Q below flanks; the worst reach Q≈7 inside vs Q≈37 flanks). <b>{nflag}/{nins} INS flagged</b>;
+these are removed to give a high-confidence callset (<code>results/sm_sv_calls_hiconf.tsv</code>).</p>
+{im(fig_insqc(iq), 'Each dot is one CIGAR insertion: x = CCS quality contrast (flank − insertion), y = homopolymer fraction. Red = flagged (dropped). Most insertions sit at contrast≈0 and low homopolymer (real); a minority collapse in quality or are homopolymer tracts.')}
+<table><tr><th>group</th><th>CIGAR INS</th><th>low-complexity</th><th>quality-decay</th><th>flagged</th></tr>{qrow}</table>
+<div class=box>The flagged fraction is <b>higher in WT (~7–13%) than CENH3ox (~2–5%)</b> — CENH3ox has far more <i>real</i> insertions,
+so artefacts are diluted. In other words the CENH3ox insertion excess is <b>not</b> a homopolymer/low-quality artefact. The
+register-checked signal (§9) and this QC are complementary filters.</div>"""
 
     # CEN vs ARM control (step 16)
     armc = ""
@@ -696,6 +748,7 @@ split/BND. That depends on array structure, not read quality, and remains the re
 {armc}
 {srcbreak}
 {insorig}
+{insqc}
 <h2>Caveat</h2><p>A single ≥50 bp change in deep satellite coverage cannot be fully distinguished from a mapping/sequencing
 artifact; the split-and-map re-mapping and the 178-bp register check are the mitigations. Treat single-molecule calls as a
 sensitivity ceiling, not a confirmed somatic set.</p>"""
