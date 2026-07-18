@@ -172,12 +172,30 @@ def insqc():
 <p>Every CIGAR insertion's inserted bases + per-base CCS qualities are checked: <b>low-complexity</b> (homopolymer &gt;30% or
 entropy &lt;1.2 bits) and <b>quality-decay</b> (insertion ≥5 Q below the ±200 bp flanks). Flagged INS are removed for the
 high-confidence set.</p>
-{summ(f"{A_OUT}/insertion_qc.tsv", AGROUPS, "Arabidopsis (centromeric insertions)")}
-{summ(f"{H_OUT}/insertion_qc.tsv", HHAPS, "Human (genome-wide insertions)")}
-<div class=box>The contrast is the story: only <b>~2–13% of Arabidopsis centromeric insertions</b> are flagged (they are real
-satellite duplications), versus <b>~80% of genome-wide human insertions</b> — genome-wide human indels are dominated by
-homopolymer/STR sequencing artefacts. The QC is essential genome-wide and confirms the CENH3ox centromere signal is not
-an artefact.</div>"""
+{summ(f"{A_OUT}/insertion_qc.tsv", AGROUPS, "Arabidopsis (centromeric insertions, by group)")}
+{summ(f"{H_OUT}/insertion_qc.tsv", HHAPS, "Human (genome-wide insertions, by haplotype)")}
+{compartment_table()}
+<div class=box>The <b>CEN-vs-arm contrast is the story.</b> In <b>unique arm sequence almost every</b> single-molecule
+insertion is an artefact (<b>99% Arabidopsis, 84% human flagged</b>), whereas in the <b>centromere most are real</b>
+(only <b>3% Arabidopsis, 33% human flagged</b>). So a ≥50 bp "insertion" seen in one arm read is essentially always a
+homopolymer/STR sequencing error, while centromeric insertions are genuine satellite duplications. This both validates the
+CEN signal (esp. the CENH3ox excess) and shows the QC is indispensable outside the centromere.</div>"""
+
+
+def compartment_table():
+    p = f"{A_OUT}/insertion_qc_by_compartment.tsv"
+    rows = load(p)
+    if not rows:
+        return ""
+    tr = "".join(
+        f"<tr><td>{d['organism']}</td><td>{d['compartment']}</td><td>{d['n_ins']}</td>"
+        f"<td>{d['low_complexity']}</td><td>{d['quality_decay']}</td>"
+        f"<td><b>{d['flagged']}</b> ({d['pct_flagged']}%)</td></tr>" for d in rows)
+    return ("<h3>Flagged insertions dissected: CEN vs arms (the key 2×2)</h3>"
+            "<table><tr><th>organism</th><th>compartment</th><th>insertions</th><th>low-complexity</th>"
+            f"<th>quality-decay</th><th>flagged</th></tr>{tr}</table>"
+            "<p class=cap style='font-size:12px;color:#777'>Arabidopsis ARM = CIGAR I≥50 bp scanned in the distal-arm "
+            "windows (unique sequence); human CEN/ARM = genome-wide insertions classified by the HG002 alpha-CEN / ARM beds.</p>")
 
 
 def main():
