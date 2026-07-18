@@ -175,11 +175,41 @@ high-confidence set.</p>
 {summ(f"{A_OUT}/insertion_qc.tsv", AGROUPS, "Arabidopsis (centromeric insertions, by group)")}
 {summ(f"{H_OUT}/insertion_qc.tsv", HHAPS, "Human (genome-wide insertions, by haplotype)")}
 {compartment_table()}
+{examples_html()}
 <div class=box>The <b>CEN-vs-arm contrast is the story.</b> In <b>unique arm sequence almost every</b> single-molecule
 insertion is an artefact (<b>99% Arabidopsis, 84% human flagged</b>), whereas in the <b>centromere most are real</b>
 (only <b>3% Arabidopsis, 33% human flagged</b>). So a ≥50 bp "insertion" seen in one arm read is essentially always a
 homopolymer/STR sequencing error, while centromeric insertions are genuine satellite duplications. This both validates the
 CEN signal (esp. the CENH3ox excess) and shows the QC is indispensable outside the centromere.</div>"""
+
+
+def _fileb64(p):
+    return base64.b64encode(open(p, "rb").read()).decode() if os.path.exists(p) else None
+
+
+def examples_html():
+    import glob as _g
+    def one(pattern, cap):
+        hits = sorted(_g.glob(pattern))
+        if not hits:
+            return ""
+        b = _fileb64(hits[0])
+        return im(b, cap) if b else ""
+    # one quality-decay + one homopolymer per organism
+    a_qd = one(f"{A_OUT}/artefact_examples/arabidopsis_quality_decay_*.png",
+               "Arabidopsis — QUALITY DECAY: the inserted bases (shaded) collapse to ~Q7 while the flanks are ~Q40; base strip below.")
+    a_hp = one(f"{A_OUT}/artefact_examples/arabidopsis_homopolymer_*.png",
+               "Arabidopsis — HOMOPOLYMER: a ~55 bp insertion that is ~98% a single base (poly-G, entropy ≈0.1 bits) — a classic HiFi homopolymer artefact.")
+    h_qd = one(f"{H_OUT}/artefact_examples/human_quality_decay_*.png",
+               "Human — QUALITY DECAY: CCS quality drops inside the insertion vs the flanks.")
+    h_hp = one(f"{H_OUT}/artefact_examples/human_homopolymer_*.png",
+               "Human — HOMOPOLYMER / low-complexity inserted tract.")
+    if not any((a_qd, a_hp, h_qd, h_hp)):
+        return ""
+    return (f"<h3>Example flagged insertions (what the artefacts look like)</h3>"
+            f"<p>Top panel = per-base <b>CCS quality</b> along the read (insertion shaded red; flank vs insertion mean-Q "
+            f"lines). Bottom = the <b>inserted sequence</b> as a coloured base strip, homopolymer runs (≥5 bp) underlined.</p>"
+            f"{a_qd}{a_hp}{h_qd}{h_hp}")
 
 
 def compartment_table():
