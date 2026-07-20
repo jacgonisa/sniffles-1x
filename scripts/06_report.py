@@ -75,13 +75,15 @@ def group_rates(rates):
     return {g: {t: (cnt[g][t] / mb[g] if mb[g] else 0) for t in TYPES} for g in GROUPS}, mb
 
 
-def fig_interaction(rates):
+def fig_interaction(rates, types=None, ylab=None):
     """Everything in one plot: per-Mb SV rate, tissue on x, one line per genotype,
     so the genotype×tissue interaction (CENH3ox lifts leaf most) is visible.
-    Thin markers = col/ler haplotypes; thick line = Mb-weighted pooled group rate."""
+    Thin markers = col/ler haplotypes; thick line = Mb-weighted pooled group rate.
+    `types` = which SV types to sum (default all 5); DEL+INS = register-checked, BND-free."""
+    types = types or TYPES
     gr, mb = group_rates(rates)
-    grate = {g: sum(gr[g].values()) for g in GROUPS}
-    perhap = {(r["sample"], r["hap"]): float(r["ALL_per_mb"]) for r in rates}
+    grate = {g: sum(gr[g][t] for t in types) for g in GROUPS}
+    perhap = {(r["sample"], r["hap"]): sum(float(r.get(f"{t}_per_mb", 0) or 0) for t in types) for r in rates}
     fig, ax = plt.subplots(figsize=(6.6, 4.6))
     X = {"leaf": 0, "pollen": 1}
     HAPMARK = {"col": "o", "ler": "^"}       # col = circle, ler = triangle
@@ -105,7 +107,7 @@ def fig_interaction(rates):
         ax.annotate(f"pollen/leaf = {gp/max(gl,1e-9):.1f}×", (0.5, (gl + gp) / 2 + yo),
                     ha="center", fontsize=8.5, color=col, style="italic")
     ax.set_xticks([0, 1]); ax.set_xticklabels(["leaf", "pollen"], fontsize=11)
-    ax.set_ylabel("single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.25)
+    ax.set_ylabel(ylab or "single-molecule SV calls per Mb (CEN)"); ax.set_xlim(-0.25, 1.25)
     ax.set_ylim(0, max(grate.values()) * 1.2)
     # both legends OUTSIDE the axes (to the right) so they never cover points
     leg1 = ax.legend(title="genotype", fontsize=9.5, loc="upper left", bbox_to_anchor=(1.02, 1.0))
@@ -115,9 +117,11 @@ def fig_interaction(rates):
                      Line2D([0], [0], marker="o", color="#666", lw=0, ms=7, label="col haplotype"),
                      Line2D([0], [0], marker="^", color="#666", lw=0, ms=7, label="ler haplotype")]
     ax.legend(handles=shape_handles, title="marker", fontsize=9, loc="lower left", bbox_to_anchor=(1.02, 0.0))
-    ax.set_title("Genotype × tissue: CENH3ox lifts the leaf (somatic) rate most\n"
+    tset = "+".join(types) if len(types) <= 2 else "all SV types"
+    ax.set_title(f"Genotype × tissue ({tset}): CENH3ox lifts the leaf (somatic) rate most\n"
                  "(diamond = pooled · ○ col · △ ler)")
-    fig.savefig(f"{OUT}/figures/rate_interaction.png", dpi=140, bbox_inches="tight")  # standalone for slides
+    stem = "rate_interaction" + ("_delins" if types == ["DEL", "INS"] else "")
+    fig.savefig(f"{OUT}/figures/{stem}.png", dpi=140, bbox_inches="tight")  # standalone for slides
     return png(fig)
 
 
@@ -242,6 +246,8 @@ def main():
     grate = {g: sum(gr[g].values()) for g in GROUPS}   # ALL calls/Mb per group
     f1, fr, f2, f3 = fig_counts(rows), fig_rates(rates), fig_sizes(rows), fig_methods(rows)
     finter = fig_interaction(rates)
+    finter_di = fig_interaction(rates, types=["DEL", "INS"],
+                                ylab="DEL+INS calls per Mb (CEN, register-checked)")
     fq = fig_qc(qc) if qc else ""
 
     # dataset-at-a-glance (Arabidopsis / this run) — per group (genotype×tissue) × haplotype
@@ -723,7 +729,11 @@ which removes the depth difference. The comparison of interest is <b>WT vs CENH3
 (no true flip), but the <b>tissue bias differs</b>: WT has a strong pollen bias (pollen ≈ 2× leaf), while in CENH3ox the leaf
 nearly catches up (pollen ≈ 1.1× leaf). CENH3ox lifts the <b>leaf</b> rate ~4× but the <b>pollen</b> rate only ~2×, i.e. it adds
 a large <b>somatic/mitotic</b> instability component (visible in leaf) on top of WT's mostly <b>meiotic</b> (pollen-biased) instability.</p>
-{im(finter, 'Per-Mb SV rate, tissue on x, one line per genotype (faint dots = col/ler haplotypes). The WT line rises steeply leaf→pollen; the CENH3ox line is high and nearly flat — the gap between lines (the CENH3ox effect) is largest in leaf.')}
+{im(finter, 'ALL SV types (DEL+INS+DUP+INV+BND) per Mb of CEN-mapped read sequence, tissue on x, one line per genotype (faint dots = col/ler). The WT line rises steeply leaf→pollen; the CENH3ox line is high and nearly flat — the CENH3ox effect is largest in leaf. NOTE this ALL rate includes BND/DUP/INV, which are cross-mapping-confounded (esp. in pollen).')}
+<p><b>Register-checked version (DEL+INS only).</b> The same plot restricted to the trustworthy CIGAR DEL/INS classes
+(register-checked, no split-and-map/BND cross-mapping). The genotype×tissue pattern holds, and the pollen bias is smaller than
+in the ALL plot (the difference was BND-inflated).</p>
+{im(finter_di, 'DEL+INS only (per Mb of CEN-mapped read sequence) — the register-checked, cross-mapping-free rate.')}
 <h2>3. Read-quality controls — is the rate difference an artifact?</h2>
 <p>For <b>single-molecule</b> calling each read is an independent sample, so depth does not bias the per-Mb rate. The remaining
 ways a group could be inflated are read <i>properties</i>. Per-group medians (haps averaged): CEN read length
