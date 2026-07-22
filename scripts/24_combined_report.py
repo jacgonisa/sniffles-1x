@@ -187,6 +187,23 @@ def _fileb64(p):
     return base64.b64encode(open(p, "rb").read()).decode() if os.path.exists(p) else None
 
 
+def mechanism_html():
+    b = _fileb64(f"{ROOT}/docs/mechanism_taxonomy.png")
+    if not b:
+        return ""
+    return (f"<h2>0. Mechanism taxonomy — every kind of event, and where it is captured</h2>"
+            f"<p>An event joins two genomic loci in one read. Two axes: <b>partner molecule</b> "
+            f"(self/sister · homolog · non-homolog) and <b>allelic vs non-allelic</b> (same locus vs offset), with a "
+            f"<b>compartment</b> overlay (CEN178 satellite · pericentromere · unique arm). Colour = where each class is "
+            f"captured: <b>our non-hybrid SV pipeline</b> (green: self/sister unequal exchange + ectopic), "
+            f"<b>CHARLA hybrid/crossover analysis</b> (blue: inter-homolog), a <b>current gap</b> (red — notably an "
+            f"insertion whose donor is templated from the other homolog, and inter-homolog SVs on reads that strict-90 "
+            f"discards), or a <b>not-a-real-event artefact</b> (grey).</p>"
+            f'<figure><img style="max-width:100%" src="data:image/png;base64,{b}">'
+            f"<figcaption>Exhaustive taxonomy. intra-chromatid vs inter-sister are sequence-identical so they are one "
+            f"class; inter-homolog lives in CHARLA (hybrid reads); the red gaps are the next things to build.</figcaption></figure>")
+
+
 def examples_html():
     import glob as _g
     def one(pattern, cap):
@@ -240,6 +257,7 @@ table{{border-collapse:collapse;margin:8px 0;font-size:13.5px}}td,th{{border:1px
 <code>sv.classify_splits</code>, no clustering) applied to two datasets. Arabidopsis: WT &amp; CENH3ox, leaf &amp; pollen,
 Col &amp; Ler, centromere-restricted. Human: HG002 sperm (BLS0005+BLS0006), MAT &amp; PAT, genome-wide. Full per-dataset
 reports: <code>report.html</code> (Arabidopsis) and <code>results_human/report_human.html</code> (human).</p>
+{mechanism_html()}
 {arabidopsis()}
 {human()}
 {insqc()}
