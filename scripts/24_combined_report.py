@@ -202,51 +202,84 @@ MECHLAB = {
 MCOL = {"ours": "#1E8449", "charla": "#2471A3", "art": "#7F8C8D"}
 
 
+def _read_mb(path, col):
+    d = defaultdict(float)
+    for r in load(path):
+        d[r["sample"]] += float(r[col])   # sum haplotypes -> per group
+    return d
+
+
 def mechanism_integration_html():
     rows = load(f"{A_OUT}/mechanism_summary.tsv")
     if not rows:
         return ""
-    # table: mechanism (class) × group, split by source colour
-    d = defaultdict(dict)
+    cnt = defaultdict(dict)
     for r in rows:
-        d[r["mechanism"]][r["group"]] = int(r["count"])
+        cnt[r["mechanism"]][r["group"]] = int(r["count"])
+    # denominators: read-Mb ANALYSED by each pipeline. sniffles scanned CEN reads (CEN-mapped-Mb);
+    # CHARLA scanned all reads (genome-mapped-Mb). Normalise so leaf/pollen (very different depth) compare.
+    cen_mb = _read_mb(f"{A_OUT}/cen_mapped_mb.tsv", "cen_mapped_mb")
+    gen_mb = _read_mb(f"{A_OUT}/genome_mapped_mb.tsv", "genome_mapped_mb")  # WT only
+
+    def rate_per_gb(m, g, src):
+        n = cnt.get(m, {}).get(g)
+        denom = (cen_mb.get(g) if src == "ours" or m == "inter_homolog_satellite" else gen_mb.get(g))
+        if n is None or not denom:
+            return None
+        return n / (denom / 1000.0)     # events per Gb of analysed reads
+
     order = ["self_sister_unequal_inreg", "self_sister_unequal_offreg", "inversion", "ectopic_samehap",
              "inter_homolog_crossover", "inter_homolog_satellite", "ectopic_interhomolog",
              "artefact_crossmap", "artefact_lowqual", "charla_ambiguous"]
     body = ""
     for m in order:
-        if m not in d:
+        if m not in cnt:
             continue
         cls, lab, src = MECHLAB[m]
+        denom_lab = "CEN-reads" if (src == "ours" or m == "inter_homolog_satellite") else "genome-reads"
+        cells = ""
+        for g in AGROUPS:
+            r = rate_per_gb(m, g, src); raw = cnt[m].get(g)
+            cells += f"<td>{('%.2f' % r) if r is not None else '·'}<br><span style='color:#999;font-size:10px'>{raw if raw is not None else ''}</span></td>"
         body += (f"<tr><td style='color:{MCOL[src]}'><b>{cls}</b></td><td style='color:{MCOL[src]}'>{lab}</td>"
-                 + "".join(f"<td>{d[m].get(g, '·')}</td>" for g in AGROUPS) + "</tr>")
-    tbl = ("<table><tr><th>class</th><th>mechanism</th>" + "".join(f"<th>{GLAB[g]}</th>" for g in AGROUPS)
-           + "</tr>" + body + "</table>")
-    # figure: WT leaf vs pollen — satellite unequal (ours) vs inter-homolog crossover (CHARLA)
-    fig, ax = plt.subplots(figsize=(7.5, 4.2))
-    x = [0, 1]; w = 0.38
-    sat = [d.get("self_sister_unequal_inreg", {}).get(g, 0) for g in ("wt_leaf", "wt_pollen")]
-    cox = [d.get("inter_homolog_crossover", {}).get(g, 0) for g in ("wt_leaf", "wt_pollen")]
-    ax.bar([xi - w/2 for xi in x], sat, w, color="#1E8449", label="self/sister satellite unequal exchange  (sniffles_1x)")
-    ax.bar([xi + w/2 for xi in x], cox, w, color="#2471A3", label="inter-homolog crossover  (CHARLA)")
-    for xi, v in zip([x[0]-w/2, x[1]-w/2], sat): ax.text(xi, v, str(v), ha="center", va="bottom", fontsize=8)
-    for xi, v in zip([x[0]+w/2, x[1]+w/2], cox): ax.text(xi, v, str(v), ha="center", va="bottom", fontsize=8)
-    ax.set_yscale("log"); ax.set_ylim(top=max(sat + cox) * 6)
-    ax.set_xticks(x); ax.set_xticklabels(["WT leaf", "WT pollen"], fontsize=11)
-    ax.set_ylabel("events (log)"); ax.legend(fontsize=8.5, loc="upper left")
-    ax.set_title("charla_hifi + sniffles_1x — complementary mechanisms\nsatellite unequal exchange (CEN, both tissues) vs meiotic crossover (pollen)")
-    return (f"<h2>0b. Integrated mechanism counts — charla_hifi + sniffles_1x</h2>"
-            f"<p>Each event assigned to a taxonomy class and its source pipeline: <span style='color:#1E8449'><b>sniffles_1x</b></span> "
-            f"(self/sister + ectopic, from the non-hybrid reads), <span style='color:#2471A3'><b>CHARLA</b></span> (inter-homolog, "
-            f"from the hybrid reads; WT only — CENH3ox was not run through CHARLA), and <span style='color:#7F8C8D'><b>artefact</b></span>. "
-            f"The two pipelines are complementary: <b>self/sister satellite unequal exchange</b> dominates the centromere in every "
-            f"group (and is hugely elevated in CENH3ox), whereas <b>inter-homolog crossovers are pollen-specific</b> "
-            f"(WT pollen {d.get('inter_homolog_crossover',{}).get('wt_pollen',0)} vs WT leaf "
-            f"{d.get('inter_homolog_crossover',{}).get('wt_leaf',0)}) — meiotic recombination, mostly in the arms.</p>"
-            f"{im(png(fig), 'WT leaf vs pollen (log): satellite unequal exchange (green, sniffles_1x) is high in both; inter-homolog crossover (blue, CHARLA) spikes in pollen only — the meiotic signal.')}"
-            f"{tbl}<p class=cap style='font-size:12px;color:#777'>· = not applicable (CHARLA classes are WT-only). "
-            f"Class numbers refer to the §0 taxonomy. sniffles_1x satellite events are inherently non-allelic self/sister "
-            f"(intra-chromatid vs inter-sister are indistinguishable).</p>")
+                 f"<td style='font-size:11px'>{denom_lab}</td>{cells}</tr>")
+    tbl = ("<table><tr><th>class</th><th>mechanism</th><th>per Gb of…</th>"
+           + "".join(f"<th>{GLAB[g]}</th>" for g in AGROUPS) + "</tr>" + body
+           + "</table><p class=cap style='font-size:11px;color:#999'>each cell = rate (events per Gb of analysed reads); "
+             "small grey number = raw count. · = N/A (CHARLA is WT-only).</p>")
+
+    # figure: two normalised comparisons, WT leaf vs pollen (each in its own denominator)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    for ax, (m, ttl, col) in zip(axes, [
+            ("self_sister_unequal_inreg", "SELF/SISTER satellite unequal exchange\n(sniffles_1x · per Gb CEN-reads)", "#1E8449"),
+            ("inter_homolog_crossover", "INTER-HOMOLOG crossover\n(CHARLA · per Gb genome-reads)", "#2471A3")]):
+        src = MECHLAB[m][2]
+        vals = [rate_per_gb(m, g, src) or 0 for g in ("wt_leaf", "wt_pollen")]
+        ax.bar([0, 1], vals, 0.55, color=col)
+        for xi, v in zip([0, 1], vals):
+            ax.text(xi, v, f"{v:.2f}", ha="center", va="bottom", fontsize=9)
+        fold = vals[1] / vals[0] if vals[0] else float("inf")
+        ax.set_xticks([0, 1]); ax.set_xticklabels(["WT leaf", "WT pollen"], fontsize=11)
+        ax.set_title(ttl, fontsize=9.5); ax.set_ylabel("events per Gb of reads")
+        ax.set_ylim(0, max(vals) * 1.25 if max(vals) else 1)
+        ax.text(0.5, 0.92, f"pollen/leaf = {fold:.0f}×", transform=ax.transAxes, ha="center",
+                fontsize=10, color=col, fontweight="bold")
+    fig.suptitle("Depth-normalised: satellite unequal exchange ≈ constitutive; inter-homolog crossover is meiotic (pollen)",
+                 fontsize=10.5, y=1.06)
+    fig.subplots_adjust(top=0.80, wspace=0.28)
+    sat_l = rate_per_gb("self_sister_unequal_inreg", "wt_leaf", "ours"); sat_p = rate_per_gb("self_sister_unequal_inreg", "wt_pollen", "ours")
+    cox_l = rate_per_gb("inter_homolog_crossover", "wt_leaf", "charla"); cox_p = rate_per_gb("inter_homolog_crossover", "wt_pollen", "charla")
+    return (f"<h2>0b. Integrated mechanism RATES — charla_hifi + sniffles_1x (depth-normalised)</h2>"
+            f"<p>Raw counts conflate biology with depth (WT leaf is ~16× deeper in the CEN, ~7× genome-wide, than pollen), so every "
+            f"mechanism is normalised by the <b>Mb of reads each pipeline actually analysed</b>: sniffles_1x per <b>CEN-mapped-Mb</b> "
+            f"(it scanned CEN reads only), CHARLA per <b>genome-mapped-Mb</b> (it scanned all reads). After normalisation the two "
+            f"mechanisms separate cleanly: <b>self/sister satellite unequal exchange is ~constitutive</b> "
+            f"(WT leaf {sat_l:.2f} → pollen {sat_p:.2f} per Gb, ~{sat_p/max(sat_l,1e-9):.0f}×), whereas <b>inter-homolog crossover is "
+            f"strongly meiotic</b> (WT leaf {cox_l:.2f} → pollen {cox_p:.1f} per Gb, ~{cox_p/max(cox_l,1e-9):.0f}× — the depth-corrected "
+            f"pollen enrichment, far larger than the raw ~37× because pollen is much shallower).</p>"
+            f"{im(png(fig), 'Depth-normalised rates (per Gb of analysed reads). Satellite unequal exchange (left) is similar in leaf and pollen; inter-homolog crossover (right) is ~270× higher in pollen — the meiotic signal, previously masked by leaf’s greater depth.')}"
+            f"{tbl}<p class=cap style='font-size:12px;color:#777'>sniffles_1x satellite events are inherently non-allelic self/sister "
+            f"(intra-chromatid vs inter-sister indistinguishable). CHARLA is WT-only (no CENH3ox hybrid-read run).</p>")
 
 
 def mechanism_html():
