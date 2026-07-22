@@ -28,5 +28,6 @@ $PY 20_insertion_origin.py
 $BASEPY 21_insertion_origin_detailed.py
 $PY 22_insertion_origin_scan.py
 $PY 23_insertion_qc.py
+$PY 27_mechanism_classify.py
 $PY 06_report.py
 echo "ALL_FULL_DONE"

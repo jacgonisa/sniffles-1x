@@ -187,6 +187,68 @@ def _fileb64(p):
     return base64.b64encode(open(p, "rb").read()).decode() if os.path.exists(p) else None
 
 
+MECHLAB = {
+    "self_sister_unequal_inreg": ("1", "self/sister unequal exchange, in-register (satellite)", "ours"),
+    "self_sister_unequal_offreg": ("1", "self/sister unequal exchange, out-of-register", "ours"),
+    "inversion": ("2", "inversion (arm/CEN)", "ours"),
+    "ectopic_samehap": ("4", "ectopic (same-hap BND to another chromosome)", "ours"),
+    "inter_homolog_crossover": ("5", "inter-homolog crossover / gene conversion", "charla"),
+    "inter_homolog_satellite": ("6", "inter-homolog satellite exchange (tandem)", "charla"),
+    "ectopic_interhomolog": ("7", "ectopic inter-homolog (non-homologous)", "charla"),
+    "artefact_crossmap": ("10", "artefact — satellite cross-mapping BND", "art"),
+    "artefact_lowqual": ("11", "artefact — homopolymer / quality INS", "art"),
+    "charla_ambiguous": ("12", "artefact — ambiguous / chimeric (CHARLA)", "art"),
+}
+MCOL = {"ours": "#1E8449", "charla": "#2471A3", "art": "#7F8C8D"}
+
+
+def mechanism_integration_html():
+    rows = load(f"{A_OUT}/mechanism_summary.tsv")
+    if not rows:
+        return ""
+    # table: mechanism (class) × group, split by source colour
+    d = defaultdict(dict)
+    for r in rows:
+        d[r["mechanism"]][r["group"]] = int(r["count"])
+    order = ["self_sister_unequal_inreg", "self_sister_unequal_offreg", "inversion", "ectopic_samehap",
+             "inter_homolog_crossover", "inter_homolog_satellite", "ectopic_interhomolog",
+             "artefact_crossmap", "artefact_lowqual", "charla_ambiguous"]
+    body = ""
+    for m in order:
+        if m not in d:
+            continue
+        cls, lab, src = MECHLAB[m]
+        body += (f"<tr><td style='color:{MCOL[src]}'><b>{cls}</b></td><td style='color:{MCOL[src]}'>{lab}</td>"
+                 + "".join(f"<td>{d[m].get(g, '·')}</td>" for g in AGROUPS) + "</tr>")
+    tbl = ("<table><tr><th>class</th><th>mechanism</th>" + "".join(f"<th>{GLAB[g]}</th>" for g in AGROUPS)
+           + "</tr>" + body + "</table>")
+    # figure: WT leaf vs pollen — satellite unequal (ours) vs inter-homolog crossover (CHARLA)
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
+    x = [0, 1]; w = 0.38
+    sat = [d.get("self_sister_unequal_inreg", {}).get(g, 0) for g in ("wt_leaf", "wt_pollen")]
+    cox = [d.get("inter_homolog_crossover", {}).get(g, 0) for g in ("wt_leaf", "wt_pollen")]
+    ax.bar([xi - w/2 for xi in x], sat, w, color="#1E8449", label="self/sister satellite unequal exchange  (sniffles_1x)")
+    ax.bar([xi + w/2 for xi in x], cox, w, color="#2471A3", label="inter-homolog crossover  (CHARLA)")
+    for xi, v in zip([x[0]-w/2, x[1]-w/2], sat): ax.text(xi, v, str(v), ha="center", va="bottom", fontsize=8)
+    for xi, v in zip([x[0]+w/2, x[1]+w/2], cox): ax.text(xi, v, str(v), ha="center", va="bottom", fontsize=8)
+    ax.set_yscale("log"); ax.set_ylim(top=max(sat + cox) * 6)
+    ax.set_xticks(x); ax.set_xticklabels(["WT leaf", "WT pollen"], fontsize=11)
+    ax.set_ylabel("events (log)"); ax.legend(fontsize=8.5, loc="upper left")
+    ax.set_title("charla_hifi + sniffles_1x — complementary mechanisms\nsatellite unequal exchange (CEN, both tissues) vs meiotic crossover (pollen)")
+    return (f"<h2>0b. Integrated mechanism counts — charla_hifi + sniffles_1x</h2>"
+            f"<p>Each event assigned to a taxonomy class and its source pipeline: <span style='color:#1E8449'><b>sniffles_1x</b></span> "
+            f"(self/sister + ectopic, from the non-hybrid reads), <span style='color:#2471A3'><b>CHARLA</b></span> (inter-homolog, "
+            f"from the hybrid reads; WT only — CENH3ox was not run through CHARLA), and <span style='color:#7F8C8D'><b>artefact</b></span>. "
+            f"The two pipelines are complementary: <b>self/sister satellite unequal exchange</b> dominates the centromere in every "
+            f"group (and is hugely elevated in CENH3ox), whereas <b>inter-homolog crossovers are pollen-specific</b> "
+            f"(WT pollen {d.get('inter_homolog_crossover',{}).get('wt_pollen',0)} vs WT leaf "
+            f"{d.get('inter_homolog_crossover',{}).get('wt_leaf',0)}) — meiotic recombination, mostly in the arms.</p>"
+            f"{im(png(fig), 'WT leaf vs pollen (log): satellite unequal exchange (green, sniffles_1x) is high in both; inter-homolog crossover (blue, CHARLA) spikes in pollen only — the meiotic signal.')}"
+            f"{tbl}<p class=cap style='font-size:12px;color:#777'>· = not applicable (CHARLA classes are WT-only). "
+            f"Class numbers refer to the §0 taxonomy. sniffles_1x satellite events are inherently non-allelic self/sister "
+            f"(intra-chromatid vs inter-sister are indistinguishable).</p>")
+
+
 def mechanism_html():
     b = _fileb64(f"{ROOT}/docs/mechanism_taxonomy.png")
     if not b:
@@ -258,6 +320,7 @@ table{{border-collapse:collapse;margin:8px 0;font-size:13.5px}}td,th{{border:1px
 Col &amp; Ler, centromere-restricted. Human: HG002 sperm (BLS0005+BLS0006), MAT &amp; PAT, genome-wide. Full per-dataset
 reports: <code>report.html</code> (Arabidopsis) and <code>results_human/report_human.html</code> (human).</p>
 {mechanism_html()}
+{mechanism_integration_html()}
 {arabidopsis()}
 {human()}
 {insqc()}
