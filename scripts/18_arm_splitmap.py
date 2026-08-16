@@ -104,10 +104,13 @@ def main():
     cen_cnt = defaultdict(Counter); cen_reads = defaultdict(int)
     for r in csv.DictReader(open(f"{OUT}/split_and_map.tsv"), delimiter="\t"):
         cen_cnt[r["sample"]][r["svtype"]] += 1
-    with open(f"{OUT}/cen_read_counts.tsv") as f:
-        next(f)
-        for ln in f:
-            s, h, n = ln.split(); cen_reads[s] += int(n)
+    try:  # ponytail: synthetic run skips the CEN-count step; arm floor doesn't need it
+        with open(f"{OUT}/cen_read_counts.tsv") as f:
+            next(f)
+            for ln in f:
+                s, h, n = ln.split(); cen_reads[s] += int(n)
+    except FileNotFoundError:
+        pass
 
     cols = ["group", "svtype", "cen_per_Mreads", "arm_per_Mreads", "enrichment_CEN_over_ARM"]
     with open(f"{OUT}/arm_splitmap_control.tsv", "w") as f:

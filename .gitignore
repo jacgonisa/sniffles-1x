@@ -8,3 +8,5 @@ __pycache__/
 .DS_Store
 ._*
 results_human/
+results_synthetic/
+synthetic_reads/

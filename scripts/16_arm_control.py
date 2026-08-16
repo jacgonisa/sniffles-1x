@@ -59,11 +59,14 @@ def main():
     cen_cnt = defaultdict(lambda: Counter()); cen_reads = defaultdict(int)
     for r in csv.DictReader(open(f"{OUT}/leadprov_sm.tsv"), delimiter="\t"):
         cen_cnt[r["sample"]][r["svtype"]] += 1
-    with open(f"{OUT}/cen_read_counts.tsv") as f:
-        next(f)
-        for ln in f:
-            s, h, nr = ln.split()
-            cen_reads[s] += int(nr)
+    try:  # ponytail: synthetic run skips the CEN-count step; arm floor doesn't need it
+        with open(f"{OUT}/cen_read_counts.tsv") as f:
+            next(f)
+            for ln in f:
+                s, h, nr = ln.split()
+                cen_reads[s] += int(nr)
+    except FileNotFoundError:
+        pass
 
     rows = []
     for samp in GROUPS:

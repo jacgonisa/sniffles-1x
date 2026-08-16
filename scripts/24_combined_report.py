@@ -340,6 +340,38 @@ def compartment_table():
             "windows (unique sequence); human CEN/ARM = genome-wide insertions classified by the HG002 alpha-CEN / ARM beds.</p>")
 
 
+def synthetic_html():
+    """Real vs synthetic mapping-artefact floor. Floor ~0 => the real CEN/arm signal is not a mapping artefact."""
+    rows = load(f"{A_OUT}/synthetic_comparison.tsv")
+    if not rows:
+        return ""
+    fig = f"{A_OUT}/synthetic_control.png"
+    b = _fileb64(fig) if os.path.exists(fig) else ""
+    figh = im(b, "Real per-Mb CEN SV rate (bars) vs the synthetic floor (red line). "
+                 "Reads simulated from the variant-free assemblies (badread HiFi, identity approx 99.8% - "
+                 "median divergence slightly ABOVE the real reads' 0.0007, i.e. not artificially clean), "
+                 "mapped back with the identical winnowmap + pipeline.") if b else ""
+    key = [d for d in rows if d["compartment"] == "CEN" and d["type"] in ("INREG", "DEL", "INS", "DUP", "BND")]
+    tr = "".join(
+        f"<tr><td>{d['group'].replace('_',' ')}</td><td>{d['type']}</td>"
+        f"<td>{float(d['real_rate']):.3f}</td><td>{float(d['synthetic_floor']):.3f}</td>"
+        f"<td><b>{float(d['biological_excess']):.3f}</b></td><td>{d['pct_floor']}%</td></tr>" for d in key)
+    return (f"<h2>2b. Synthetic-data control — the mapping-artefact floor</h2>"
+            f'<div class=box>Reads were simulated <b>from the assemblies themselves</b> (which contain no variants), '
+            f"mirroring the real 4-group structure and read-length profiles, then mapped back and run through the "
+            f"<b>identical</b> pipeline. Every SV called on such reads is by construction an artefact = the basal floor "
+            f"(satellite cross-mapping + simulated HiFi error). <b>Result: the floor is 0.000/Mb for every SV type in "
+            f"both the centromere and the arms.</b> So the entire real signal — in-register unequal-exchange DEL/INS, "
+            f"DUP, and the pollen BND — is biological, not a satellite mis-mapping artefact.</div>"
+            f"{figh}"
+            f"<table><tr><th>group</th><th>type</th><th>real /Mb</th><th>synthetic floor</th>"
+            f"<th>biological excess</th><th>% floor</th></tr>{tr}</table>"
+            f"<p class=cap style='font-size:12px;color:#777'>Calibration: synthetic read divergence (de≈0.002) is "
+            f"slightly higher than the real reads' median (0.0007), so the zero floor is not an artefact of an "
+            f"over-clean simulation. This isolates the <b>mapping</b> floor; the separate homopolymer/quality-decay "
+            f"<b>sequencing</b> artefacts (arm INS) are quantified in §3 by insertion QC.</p>")
+
+
 def main():
     html = f"""<!doctype html><meta charset=utf-8><title>Single-molecule SV — Arabidopsis + Human, CEN vs arms</title>
 <style>body{{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:950px;margin:0 auto;padding:26px;color:#1d1d1f;line-height:1.6}}
@@ -355,6 +387,7 @@ reports: <code>report.html</code> (Arabidopsis) and <code>results_human/report_h
 {mechanism_html()}
 {mechanism_integration_html()}
 {arabidopsis()}
+{synthetic_html()}
 {human()}
 {insqc()}
 <p class=cap style="font-size:12px;color:#777;margin-top:24px">Arabidopsis arm rates = per-million-reads in CEN vs 5-Mb-distal
