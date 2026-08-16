@@ -9,4 +9,5 @@ __pycache__/
 ._*
 results_human/
 results_synthetic/
+results_synthetic_dirty/
 synthetic_reads/

@@ -79,7 +79,10 @@ else:  # ---- arabidopsis (default) ----
     # SM_SYNTHETIC=1 : synthetic-control mode — same refs/CEN/SCAN, but reads come from the
     # assemblies (S1/S2) so calls = the mapping/sequencing artefact floor. Redirects OUT + bam_path.
     SYNTH = os.environ.get("SM_SYNTHETIC") == "1"
-    OUT = f"{ROOT}/single_molecule_sv/results_synthetic" if SYNTH else f"{ROOT}/single_molecule_sv/results"
+    # SYN_DIRTY=1 : dirty variant — badread error tail calibrated to the real de distribution, so the
+    # floor also captures sequencing (homopolymer/quality-decay) artefacts, not just mapping. Separate dirs.
+    SYN_SFX = "_dirty" if os.environ.get("SYN_DIRTY") == "1" else ""
+    OUT = f"{ROOT}/single_molecule_sv/results_synthetic{SYN_SFX}" if SYNTH else f"{ROOT}/single_molecule_sv/results"
     SAMPLES = [("wt_leaf", "leaf"), ("wt_pollen", "pollen"),
                ("cenh3ox_leaf", "leaf"), ("cenh3ox_pollen", "pollen")]
     HAPS = ["col", "ler"]
@@ -95,7 +98,7 @@ else:  # ---- arabidopsis (default) ----
 
     def bam_path(sample, hap):
         if SYNTH:
-            return f"{ROOT}/sv_calling/aligned_synthetic/{sample}/strict90/{hap}_all.bam"
+            return f"{ROOT}/sv_calling/aligned_synthetic{SYN_SFX}/{sample}/strict90/{hap}_all.bam"
         if sample.startswith("cenh3ox") and hap == "col":
             return f"{ROOT}/sv_calling/aligned/{sample}/strict90/col_cenh3oxref.bam"
         return f"{ROOT}/sv_calling/aligned/{sample}/strict90/{hap}_all.bam"

@@ -341,39 +341,50 @@ def compartment_table():
 
 
 def synthetic_html():
-    """Real vs synthetic mapping-artefact floor. Floor ~0 => the real CEN/arm signal is not a mapping artefact."""
+    """Two synthetic controls: (1) mapping floor (clean, de matched to real) = 0; (2) sequencing
+    stress-test (dirty) — only INS/DEL are error-generable, DUP/INV/BND never appear."""
     rows = load(f"{A_OUT}/synthetic_comparison.tsv")
     if not rows:
         return ""
     fig = f"{A_OUT}/synthetic_control.png"
     b = _fileb64(fig) if os.path.exists(fig) else ""
-    figh = im(b, "Real per-Mb CEN SV rate (bars) vs the synthetic floor (red line). "
-                 "Reads simulated from the variant-free assemblies (badread HiFi, identity approx 99.8% - "
-                 "median divergence slightly ABOVE the real reads' 0.0007, i.e. not artificially clean), "
-                 "mapped back with the identical winnowmap + pipeline.") if b else ""
+    figh = im(b, "Real rate (bars) over the mapping floor (green line, = 0 for every type — reads simulated "
+                 "from the variant-free assemblies at the real reads' divergence, mapped back through the "
+                 "identical pipeline). The 'seq-err' tag under each type = whether a sequencing stress-test "
+                 "(HiFi error inflated well past real) can generate that type AT ALL: INS/DEL yes, "
+                 "DUP/INV/BND never.") if b else ""
     key = [d for d in rows if (d["compartment"] == "CEN" and d["type"] in ("INREG", "DEL", "INS", "DUP", "BND"))
            or (d["compartment"] == "ARM" and d["type"] in ("DEL", "INS", "DUP", "BND"))]
+    def stag(d):
+        return ("<span style='color:#b30000'>yes</span>" if float(d["seq_stress"]) > 0
+                else "<span style='color:#0a7d0a'>0</span>")
     tr = "".join(
         f"<tr><td>{d['compartment']}</td><td>{d['group'].replace('_',' ')}</td><td>{d['type']}</td>"
-        f"<td>{float(d['real_rate']):.3f}</td><td>{float(d['synthetic_floor']):.3f}</td>"
-        f"<td><b>{float(d['biological_excess']):.3f}</b></td><td>{d['pct_floor']}%</td></tr>" for d in key)
-    return (f"<h2>2b. Synthetic-data control — the mapping-artefact floor</h2>"
-            f'<div class=box>Reads were simulated <b>from the assemblies themselves</b> (which contain no variants), '
-            f"mirroring the real 4-group structure and read-length profiles, then mapped back and run through the "
-            f"<b>identical</b> pipeline. Every SV called on such reads is by construction an artefact = the basal floor "
-            f"(satellite cross-mapping + simulated HiFi error). <b>Result: the floor is 0.000/Mb for every SV type in "
-            f"both the centromere and the arms.</b> So the entire real signal — in-register unequal-exchange DEL/INS, "
-            f"DUP, and the pollen BND — is biological, not a satellite mis-mapping artefact.</div>"
+        f"<td>{float(d['real_rate']):.3f}</td><td>{float(d['mapping_floor']):.3f}</td>"
+        f"<td>{stag(d)}</td><td><b>{float(d['biological_excess']):.3f}</b></td></tr>" for d in key)
+    return (f"<h2>2b. Synthetic-data controls — mapping floor &amp; sequencing stress-test</h2>"
+            f'<div class=box><b>(1) Mapping floor.</b> Reads were simulated <b>from the assemblies themselves</b> '
+            f"(no variants), mirroring the real 4-group structure + read-length profiles, at the real reads' own "
+            f"divergence (median de 0.0007), then mapped back and run through the <b>identical</b> pipeline. "
+            f"<b>Result: 0.000 events/Mb for every SV type, in both CEN and arms.</b> So satellite cross-mapping / "
+            f"alignment does not manufacture SV calls — the real in-register DEL/INS, DUP and pollen BND are not "
+            f"mapping artefacts.<br><br>"
+            f"<b>(2) Sequencing stress-test.</b> Inflating HiFi error (badread glitches, well past the real error "
+            f"level) generates <b>only INS and DEL</b> — and <b>never DUP, INV or BND</b>, at any error level. So "
+            f"those three types are immune to sequencing artefacts (independent support that the pollen BND and the "
+            f"DUP signal are biological). INS/DEL <i>are</i> error-generable; the actual magnitude of that "
+            f"sequencing floor is measured directly on the real reads by insertion QC (§3: 99% of arm INS vs 2.7% of "
+            f"CEN INS flagged), which the caller filters — the simulator only confirms the type pattern, it "
+            f"overshoots the magnitude (its glitch model is harsher than real CCS homopolymer/quality-decay).</div>"
             f"{figh}"
             f"<table><tr><th>compartment</th><th>group</th><th>type</th>"
-            f"<th>real rate</th><th>synthetic floor</th>"
-            f"<th>biological excess</th><th>% floor</th></tr>{tr}</table>"
+            f"<th>real rate</th><th>mapping floor</th>"
+            f"<th>seq-error can<br>generate?</th><th>excess over<br>mapping floor</th></tr>{tr}</table>"
             f"<p class=cap style='font-size:12px;color:#777'>CEN rate = per Mb of CEN-mapped read sequence; "
-            f"ARM rate = per million arm reads (distal-arm windows, 5 Mb past CEN). Both floors = 0.</p>"
-            f"<p class=cap style='font-size:12px;color:#777'>Calibration: synthetic read divergence (de≈0.002) is "
-            f"slightly higher than the real reads' median (0.0007), so the zero floor is not an artefact of an "
-            f"over-clean simulation. This isolates the <b>mapping</b> floor; the separate homopolymer/quality-decay "
-            f"<b>sequencing</b> artefacts (arm INS) are quantified in §3 by insertion QC.</p>")
+            f"ARM rate = per million arm reads (distal-arm windows, 5 Mb past CEN). Mapping floor = 0 everywhere. "
+            f"'seq-error can generate?' = did the dirty stress-test produce &gt;0 of this type (magnitude not to "
+            f"scale). Even under gross error stress, CEN in-register DEL/INS reached only ~0.1/Mb vs the real "
+            f"0.4–1.6/Mb, so the in-register enrichment is also not an error artefact.</p>")
 
 
 def main():

@@ -11,13 +11,14 @@ from common import SAMPLES, HAPS, refkey, REF
 WIN = "/home/jg2070/miniforge3/envs/nextflow_env/bin/winnowmap"
 SAM = "/home/jg2070/miniforge3/envs/nextflow_env/bin/samtools"
 SYN = "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/synthetic_reads"
-ALN = "/mnt/ssd-4tb/HIFI_NAMIL/sv_calling/aligned_synthetic"
+SFX = ".dirty" if os.environ.get("SYN_DIRTY") == "1" else ""
+ALN = "/mnt/ssd-4tb/HIFI_NAMIL/sv_calling/aligned_synthetic" + ("_dirty" if SFX else "")
 THREADS = 16
 
 
 def one(sample, hap):
     rk = refkey(sample, hap); ref, rep = REF[rk]
-    fq = f"{SYN}/{sample}_{hap}.hifi.fastq.gz"
+    fq = f"{SYN}/{sample}_{hap}{SFX}.hifi.fastq.gz"
     if not os.path.exists(fq):
         print(f"  {sample} {hap}: no fastq, skip"); return
     outdir = f"{ALN}/{sample}/strict90"; os.makedirs(outdir, exist_ok=True)

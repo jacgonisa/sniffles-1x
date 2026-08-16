@@ -17,6 +17,12 @@ SYN = "/mnt/ssd-4tb/HIFI_NAMIL/single_molecule_sv/synthetic_reads"
 ARM_BUFFER, ARM_WIN = 5_000_000, 3_000_000
 DEPTH = 15                       # per-Mb rate is depth-invariant; 15x is plenty and fast
 LEN = {"leaf": (18000, 3500), "pollen": (14000, 3500)}
+# clean (mapping floor only) vs dirty (mapping+sequencing floor, error tail matched to the real reads:
+# real de median 0.0007 / mean 0.0015 / p90 0.004  ->  identity mean 99.85 with a real low tail + glitches)
+DIRTY = os.environ.get("SYN_DIRTY") == "1"
+IDENT = "99.85,100,0.5" if DIRTY else "99.8,100,0.3"
+GLITCH = "10000,25,25" if DIRTY else "0,0,0"
+SFX = ".dirty" if DIRTY else ""
 
 
 def regions(rk):
@@ -32,15 +38,15 @@ def regions(rk):
 def one(sample, hap, tis):
     rk = refkey(sample, hap); ref = REF[rk][0]
     base = f"{SYN}/{sample}_{hap}"
-    regfa = f"{base}.regions.fa"; out = f"{base}.hifi.fastq.gz"
+    regfa = f"{base}.regions.fa"; out = f"{base}{SFX}.hifi.fastq.gz"
     if os.path.exists(out) and os.path.getsize(out) > 1000:
         print(f"  {sample} {hap}: exists, skip"); return
     subprocess.run(f"{SAM} faidx {ref} {' '.join(regions(rk))} > {regfa}",
                    shell=True, check=True, executable="/bin/bash")
     mean, sd = LEN[tis]
     cmd = (f"{BADREAD} simulate --reference {regfa} --quantity {DEPTH}x --length {mean},{sd} "
-           f"--identity 99.8,100,0.3 --error_model pacbio2021 --qscore_model pacbio2021 "
-           f"--junk_reads 0 --random_reads 0 --chimeras 0 --glitches 0,0,0 --seed 7 2>/dev/null "
+           f"--identity {IDENT} --error_model pacbio2021 --qscore_model pacbio2021 "
+           f"--junk_reads 0 --random_reads 0 --chimeras 0 --glitches {GLITCH} --seed 7 2>/dev/null "
            f"| gzip > {out}")
     subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
     n = int(subprocess.check_output(f"zcat {out} | wc -l", shell=True)) // 4
