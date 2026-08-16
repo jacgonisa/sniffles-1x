@@ -351,9 +351,10 @@ def synthetic_html():
                  "Reads simulated from the variant-free assemblies (badread HiFi, identity approx 99.8% - "
                  "median divergence slightly ABOVE the real reads' 0.0007, i.e. not artificially clean), "
                  "mapped back with the identical winnowmap + pipeline.") if b else ""
-    key = [d for d in rows if d["compartment"] == "CEN" and d["type"] in ("INREG", "DEL", "INS", "DUP", "BND")]
+    key = [d for d in rows if (d["compartment"] == "CEN" and d["type"] in ("INREG", "DEL", "INS", "DUP", "BND"))
+           or (d["compartment"] == "ARM" and d["type"] in ("DEL", "INS", "DUP", "BND"))]
     tr = "".join(
-        f"<tr><td>{d['group'].replace('_',' ')}</td><td>{d['type']}</td>"
+        f"<tr><td>{d['compartment']}</td><td>{d['group'].replace('_',' ')}</td><td>{d['type']}</td>"
         f"<td>{float(d['real_rate']):.3f}</td><td>{float(d['synthetic_floor']):.3f}</td>"
         f"<td><b>{float(d['biological_excess']):.3f}</b></td><td>{d['pct_floor']}%</td></tr>" for d in key)
     return (f"<h2>2b. Synthetic-data control — the mapping-artefact floor</h2>"
@@ -364,8 +365,11 @@ def synthetic_html():
             f"both the centromere and the arms.</b> So the entire real signal — in-register unequal-exchange DEL/INS, "
             f"DUP, and the pollen BND — is biological, not a satellite mis-mapping artefact.</div>"
             f"{figh}"
-            f"<table><tr><th>group</th><th>type</th><th>real /Mb</th><th>synthetic floor</th>"
+            f"<table><tr><th>compartment</th><th>group</th><th>type</th>"
+            f"<th>real rate</th><th>synthetic floor</th>"
             f"<th>biological excess</th><th>% floor</th></tr>{tr}</table>"
+            f"<p class=cap style='font-size:12px;color:#777'>CEN rate = per Mb of CEN-mapped read sequence; "
+            f"ARM rate = per million arm reads (distal-arm windows, 5 Mb past CEN). Both floors = 0.</p>"
             f"<p class=cap style='font-size:12px;color:#777'>Calibration: synthetic read divergence (de≈0.002) is "
             f"slightly higher than the real reads' median (0.0007), so the zero floor is not an artefact of an "
             f"over-clean simulation. This isolates the <b>mapping</b> floor; the separate homopolymer/quality-decay "

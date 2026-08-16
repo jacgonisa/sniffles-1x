@@ -75,30 +75,36 @@ def main():
 
 
 def figure(rc, sc, ra, sa):
-    """Real per-Mb CEN rate (bars) vs synthetic floor (line). Floor is ~0 => all signal is real."""
+    """CEN + ARM real rate (bars) vs synthetic floor (line). Floor ~0 => all signal is real.
+    Two panels because CEN is per Mb of CEN-mapped seq and ARM is per million arm reads."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt, numpy as np
-    cats = ["INREG", "DEL", "INS", "DUP", "BND"]
-    lab = {"INREG": "in-register\nDEL/INS", "DEL": "DEL", "INS": "INS", "DUP": "DUP", "BND": "BND"}
     col = {"wt_leaf": "#2c7fb8", "cenh3ox_leaf": "#7fcdbb",
            "wt_pollen": "#d95f0e", "cenh3ox_pollen": "#fec44f"}
-    fig, ax = plt.subplots(figsize=(9, 4.2))
-    x = np.arange(len(cats)); w = 0.2
-    floor_max = 0.0
-    for i, g in enumerate(GROUPS):
-        real = [rc.get(g, {}).get(t, 0) for t in cats]
-        flo = [sc.get(g, {}).get(t, 0) for t in cats]
-        floor_max = max(floor_max, max(flo) if flo else 0)
-        ax.bar(x + (i - 1.5) * w, real, w, color=col[g], label=g.replace("_", " "))
-    ax.axhline(floor_max, ls="--", lw=1.5, color="red")
-    ax.text(len(cats) - 0.5, floor_max, f"  synthetic floor = {floor_max:.3f}/Mb",
-            color="red", va="bottom", ha="right", fontsize=9, fontweight="bold")
-    ax.set_xticks(x); ax.set_xticklabels([lab[c] for c in cats])
-    ax.set_ylabel("real events per Mb of CEN-mapped read seq")
-    ax.set_title("CEN single-molecule SV rate vs synthetic mapping-artefact floor\n"
-                 "(reads simulated from variant-free assemblies, identical pipeline)")
-    ax.legend(fontsize=8, ncol=2)
-    fig.tight_layout(); fig.savefig(f"{REAL}/synthetic_control.png", dpi=130); plt.close(fig)
+    lab = {"INREG": "in-register\nDEL/INS", "DEL": "DEL", "INS": "INS",
+           "DUP": "DUP", "INV": "INV", "BND": "BND"}
+    panels = [("CEN", ["INREG", "DEL", "INS", "DUP", "BND"], rc, sc,
+               "real events per Mb of CEN-mapped read seq"),
+              ("ARM", ["DEL", "INS", "DUP", "INV", "BND"], ra, sa,
+               "real events per million arm reads")]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.4))
+    for ax, (comp, cats, real_d, syn_d, ylab) in zip(axes, panels):
+        x = np.arange(len(cats)); w = 0.2; floor_max = 0.0
+        for i, g in enumerate(GROUPS):
+            real = [real_d.get(g, {}).get(t, 0) for t in cats]
+            floor_max = max(floor_max, max((syn_d.get(g, {}).get(t, 0) for t in cats), default=0))
+            ax.bar(x + (i - 1.5) * w, real, w, color=col[g], label=g.replace("_", " "))
+        ax.axhline(floor_max, ls="--", lw=1.5, color="red")
+        ax.text(len(cats) - 0.4, floor_max, f"synthetic floor = {floor_max:.3f}  ",
+                color="red", va="bottom", ha="right", fontsize=9, fontweight="bold")
+        ax.set_xticks(x); ax.set_xticklabels([lab[c] for c in cats])
+        ax.set_ylabel(ylab); ax.set_title(f"{comp}")
+    axes[0].legend(fontsize=8, ncol=2)
+    fig.suptitle("Single-molecule SV rate vs synthetic mapping-artefact floor — CEN and ARMS\n"
+                 "(reads simulated from variant-free assemblies, identical pipeline; floor = 0 in both)",
+                 fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(f"{REAL}/synthetic_control.png", dpi=130); plt.close(fig)
     print(f"figure -> {REAL}/synthetic_control.png")
 
 
