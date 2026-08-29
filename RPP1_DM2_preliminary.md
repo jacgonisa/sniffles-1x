@@ -106,6 +106,23 @@ enrichment lives more in the split-based DUP/BND classes (see main report), not 
 
 Figure: `docs/rpp1_cigar_test.png` (arm-window distributions + compartment bars, log scale).
 
+## Meiotic crossovers at the cluster (CHARLA callset)
+
+The CHARLA recombination pipeline crossover calls live in
+`{01_f1leaf-wt,03_f1pollen-wt}/01-mask_0/output/10-call_recombination_sites/*_threshold_50.crossovers.tsv`
+(each row = a crossover read with the breakpoint interval in **both Col and Ler coords**, category 4b-2/4b-5).
+
+- **Pollen: 488 crossovers** (Chr1 121, Chr2 80, Chr3 92, Chr4 78, Chr5 117) — meiotic products.
+  **Leaf: 13** (somatic / rare, as expected).
+- **Crossovers ARE active at the RPP1/DM2 cluster in pollen:** 3 within the gene array (19.21, 19.25, 19.39 Mb —
+  one at AT3G44630) + 3 just distal (~19.58–19.60 Mb); **0 in leaf**. Enrichment vs genome-uniform:
+  cluster+flanks (600 kb) 6 obs vs 2.2 exp, **Poisson p=0.023**; tight array (260 kb) 3 vs 0.94, p=0.070
+  (~2.8×, marginal; genome-uniform is a rough null — CO density varies along chromosomes).
+
+**Synthesis:** RPP1 is **not** a de-novo *structural-SV* hotspot (SV rate at arm background) but **is** a site of
+**meiotic crossover activity** in pollen — consistent with the accession-level structural mutability of these NLR
+clusters arising from meiotic (unequal) recombination rather than somatic structural mutation.
+
 ## Caveats / next steps
 - **Col haplotype only.** The **Ler** RPP1 cluster (structurally different, and Ler-HiFi has no liftoff
   annotation yet) needs its own coordinates — map the RPP1 CDS to Ler-HiFi, then rerun. Ler is where
