@@ -88,8 +88,23 @@ below) — no evidence of elevated CIGAR-indel instability at the cluster.
   *shorter*, so per-bp the enrichment is larger.)
 
 So: the elevated pollen single-molecule indel rate is a **genome-wide arm phenomenon**, not specific to
-RPP1 — and the RPP1 cluster is unremarkable against its own arm background. Figure:
-`docs/rpp1_cigar_test.png`.
+RPP1 — and the RPP1 cluster is unremarkable against its own arm background.
+
+**(3) Compartment comparison (CIGAR DEL/INS per 1000 reads, same method) — with the centromere as reference:**
+
+| compartment | leaf /1k | pollen /1k | pollen/leaf |
+|---|---|---|---|
+| **centromere** | **5.58** | **6.43** | 1.15 (p=0.085) |
+| arm background | 0.57 | 1.26 | 2.22 (**p=1.5×10⁻⁹**) |
+| RPP1 cluster | 0.78 | 0.80 | 1.03 (p=1.0) |
+
+The **centromere is the real indel hotspot — ~10× arm background in leaf, ~5× in pollen** (and ~7–8× the
+RPP1 cluster). Against that scale the RPP1 cluster is firmly at arm level. Note the pollen>leaf enrichment
+is strongest in the **arms** (2.2×, highly significant); in the CEN, already saturated-high in both
+tissues, the CIGAR leaf-vs-pollen difference is only marginal (RR 0.87, p=0.085) — the CEN pollen
+enrichment lives more in the split-based DUP/BND classes (see main report), not CIGAR indels.
+
+Figure: `docs/rpp1_cigar_test.png` (arm-window distributions + compartment bars, log scale).
 
 ## Caveats / next steps
 - **Col haplotype only.** The **Ler** RPP1 cluster (structurally different, and Ler-HiFi has no liftoff

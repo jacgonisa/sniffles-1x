@@ -18,6 +18,8 @@ from scipy import stats
 lp = importlib.import_module("02_leadprov_sm")
 from common import CEN, CHRLEN
 
+CEN_WINDOWS = [(c, a, b) for c, (a, b) in CEN["col"].items()]  # the 5 centromeres (satellite hotspot ref)
+
 ROOT = "/mnt/ssd-4tb/HIFI_NAMIL"
 OUT = f"{ROOT}/single_molecule_sv/results/rpp1"
 WINSZ = 310_000
@@ -93,8 +95,10 @@ def main():
         bam = pysam.AlignmentFile(bam_path(sample), "rb")
         cl = count(bam, *CLUSTER)
         cw = [count(bam, c, a, b) for (c, a, b) in ctrl]
+        cen = [count(bam, c, a, b) for (c, a, b) in CEN_WINDOWS]      # pooled over the 5 CENs
+        cen_pool = (sum(x[0] for x in cen), sum(x[1] for x in cen), sum(x[2] for x in cen))
         bam.close()
-        data[tis] = {"cluster": cl, "ctrl": cw}
+        data[tis] = {"cluster": cl, "ctrl": cw, "cen": cen_pool}
         rows.append(("RPP1_cluster", tis, *cl))
         for (c, a, b), cc in zip(ctrl, cw):
             rows.append((f"{c}:{a}", tis, *cc))
@@ -123,6 +127,28 @@ def main():
         print(f"       cluster vs arm background: expected {exp:.1f} events, observed {cl[1]+cl[2]} "
               f"-> Poisson p={ppois:.3f};  cluster is at the {pct:.0f}th percentile of arm windows\n")
 
+    # compartment comparison: CEN (satellite hotspot) vs arm background vs RPP1 cluster
+    print("=== compartment comparison — CIGAR DEL/INS per 1000 reads (Col hap) ===")
+    print(f"{'compartment':16}{'leaf /1k':>10}{'pollen /1k':>12}{'pollen/leaf':>13}")
+    def rate(t):
+        rd, d, i = t; return 1000 * (d + i) / rd if rd else 0
+    comps = [("centromere", data["leaf"]["cen"], data["pollen"]["cen"]),
+             ("arm background", (sum(rd for rd, _, _ in data["leaf"]["ctrl"]),
+                                 sum(d for _, d, _ in data["leaf"]["ctrl"]),
+                                 sum(i for _, _, i in data["leaf"]["ctrl"])),
+                                (sum(rd for rd, _, _ in data["pollen"]["ctrl"]),
+                                 sum(d for _, d, _ in data["pollen"]["ctrl"]),
+                                 sum(i for _, _, i in data["pollen"]["ctrl"]))),
+             ("RPP1 cluster", data["leaf"]["cluster"], data["pollen"]["cluster"])]
+    comp_rows = []
+    for name, lt, pt in comps:
+        lr, pr = rate(lt), rate(pt)
+        print(f"{name:16}{lr:10.2f}{pr:12.2f}{(pr/lr if lr else float('nan')):13.2f}")
+        comp_rows.append((name, lt, pt, lr, pr))
+    cenL, cenP = data["leaf"]["cen"], data["pollen"]["cen"]
+    print(f"  -> CEN is {rate(cenL)/max(rate(comps[1][1]),1e-9):.0f}x the arm background in leaf, "
+          f"{rate(cenP)/max(rate(comps[1][2]),1e-9):.0f}x in pollen\n")
+
     # leaf vs pollen
     print("=== leaf vs pollen (CIGAR DEL/INS rate ratio) ===")
     clL, clP = data["leaf"]["cluster"], data["pollen"]["cluster"]
@@ -134,6 +160,9 @@ def main():
     rr2, p2 = rate_ratio_test(poolL[0], poolL[1], poolP[0], poolP[1])
     print(f"  pooled arms : leaf {1000*poolL[0]/poolL[1]:.2f} vs pollen {1000*poolP[0]/poolP[1]:.2f} /1k  "
           f"-> rate ratio(L/P)={rr2:.2f}, p={p2:.4g}  (n_L={poolL[0]}, n_P={poolP[0]} events)")
+    rr3, p3 = rate_ratio_test(cenL[1] + cenL[2], cenL[0], cenP[1] + cenP[2], cenP[0])
+    print(f"  centromere  : leaf {rate(cenL):.2f} vs pollen {rate(cenP):.2f} /1k  "
+          f"-> rate ratio(L/P)={rr3:.2f}, p={p3:.4g}  (n_L={cenL[1]+cenL[2]}, n_P={cenP[1]+cenP[2]} events)")
     # paired per-window Wilcoxon
     Lr = [1000 * (d + i) / rd if rd else 0 for rd, d, i in data["leaf"]["ctrl"]]
     Pr = [1000 * (d + i) / rd if rd else 0 for rd, d, i in data["pollen"]["ctrl"]]
@@ -143,14 +172,14 @@ def main():
         wp = float("nan")
     print(f"  paired per-window leaf vs pollen rate: Wilcoxon p={wp:.4g}")
 
-    plot(per1k)
+    plot(per1k, comp_rows)
     print("\nDONE_CIGAR_TEST")
 
 
-def plot(per1k):
+def plot(per1k, comp_rows):
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt, numpy as np
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.3))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.3))
     for ax, tis, col in [(axes[0], "leaf", "#2c7fb8"), (axes[1], "pollen", "#d95f0e")]:
         cl_rate, ctrl_rates, cl = per1k[tis]
         ax.hist(ctrl_rates, bins=15, color=col, alpha=0.6, label="arm windows")
@@ -158,7 +187,18 @@ def plot(per1k):
         ax.axvline(np.median(ctrl_rates), color="black", ls="--", lw=1, label=f"arm median ({np.median(ctrl_rates):.2f})")
         ax.set_xlabel("CIGAR DEL+INS per 1000 reads"); ax.set_ylabel("# arm windows")
         ax.set_title(f"{tis}  (cluster {cl[1]}+{cl[2]} events / {cl[0]} reads)"); ax.legend(fontsize=8)
-    fig.suptitle("RPP1/DM2 cluster CIGAR indel rate vs matched arm windows — is it an outlier?", fontsize=12)
+    # compartment bar: CEN vs arm vs cluster, log scale (CEN dwarfs the arms)
+    ax = axes[2]
+    names = [c[0] for c in comp_rows]; x = np.arange(len(names)); w = 0.38
+    ax.bar(x - w / 2, [c[3] for c in comp_rows], w, color="#2c7fb8", label="leaf")
+    ax.bar(x + w / 2, [c[4] for c in comp_rows], w, color="#d95f0e", label="pollen")
+    ax.set_yscale("log"); ax.set_ylabel("CIGAR DEL+INS per 1000 reads (log)")
+    ax.set_xticks(x); ax.set_xticklabels(names, rotation=15, ha="right")
+    ax.set_title("compartment comparison"); ax.legend(fontsize=8)
+    for xi, c in zip(x, comp_rows):
+        ax.text(xi - w / 2, c[3], f"{c[3]:.2f}", ha="center", va="bottom", fontsize=7)
+        ax.text(xi + w / 2, c[4], f"{c[4]:.2f}", ha="center", va="bottom", fontsize=7)
+    fig.suptitle("RPP1/DM2 CIGAR indel rate vs arm windows, and vs the centromere (Col hap)", fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(f"{OUT}/rpp1_cigar_test.png", dpi=130); plt.close(fig)
     print(f"figure -> {OUT}/rpp1_cigar_test.png")
