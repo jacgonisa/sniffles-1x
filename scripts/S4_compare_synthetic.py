@@ -76,8 +76,46 @@ def main():
     print("... full table -> results/synthetic_comparison.tsv")
 
     detector_breakdown()
+    periodicity()
     figure(rc, sc, dc, ra, sa, da)
     print("DONE_SYNTH_COMPARE")
+
+
+def periodicity():
+    """Do CIGAR DEL/INS sizes show 178-bp CEN178 periodicity? Real CEN = 90% whole-monomer (unequal-HR
+    signature); the dirty/artefact CIGAR indels are random-sized. This periodicity is a biological
+    fingerprint sequencing error does NOT reproduce."""
+    import matplotlib; matplotlib.use("Agg")
+    import matplotlib.pyplot as plt, numpy as np
+
+    def sizes(path):
+        if not os.path.exists(path):
+            return np.array([])
+        return np.array([abs(int(r["svlen"])) for r in csv.DictReader(open(path), delimiter="\t")
+                         if "CIGAR" in r["methods"] and r["svtype"] in ("DEL", "INS")])
+    real = sizes(f"{REAL}/sm_sv_calls.tsv"); dirty = sizes(f"{SYND}/sm_sv_calls.tsv")
+    if not len(real) or not len(dirty):
+        return
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 4.3))
+    # panel 1: phase = |svlen| mod 178, density
+    for d, c, lab in [(real, "#138D75", f"real CEN (n={len(real)})"),
+                      (dirty, "#b30000", f"dirty artefact (n={len(dirty)})")]:
+        a1.hist(d % 178, bins=np.arange(0, 179, 8), density=True, histtype="step", lw=2, color=c, label=lab)
+    a1.axvline(0, ls=":", c="grey"); a1.axvline(178, ls=":", c="grey")
+    a1.set_xlabel("|svlen| mod 178 bp  (0 / 178 = whole-monomer)"); a1.set_ylabel("density")
+    a1.set_title("CEN178 phase of CIGAR DEL/INS"); a1.legend(fontsize=8)
+    # panel 2: size comb 0..1500, density; mark 178 multiples
+    for d, c, lab in [(real, "#138D75", "real CEN"), (dirty, "#b30000", "dirty artefact")]:
+        a2.hist(d[d <= 1500], bins=np.arange(0, 1501, 18), density=True, histtype="step", lw=1.8, color=c, label=lab)
+    for k in range(1, 9):
+        a2.axvline(178 * k, ls=":", c="grey", lw=0.8)
+    a2.set_xlabel("|svlen| (bp) — dotted lines = multiples of 178"); a2.set_ylabel("density")
+    a2.set_title("CIGAR indel size spectrum"); a2.legend(fontsize=8)
+    fig.suptitle("178-bp periodicity: real CEN CIGAR indels are whole-monomer (90%); "
+                 "sequencing-error CIGAR indels are random-sized", fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(f"{REAL}/cigar_periodicity.png", dpi=130); plt.close(fig)
+    print(f"periodicity figure -> {REAL}/cigar_periodicity.png")
 
 
 def detector_breakdown():

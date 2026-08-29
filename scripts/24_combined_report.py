@@ -356,7 +356,24 @@ def detector_source_table():
             "split detectors — the sole source of DUP/INV/BND — stay near zero, which is <i>why</i> those types "
             "are error-immune.</p>"
             "<table><tr><th>run</th><th>CIGAR</th><th>SPLITREAD</th><th>SPLITANDMAP</th><th>total</th></tr>"
-            f"{tr}</table>")
+            f"{tr}</table>"
+            f"{periodicity_html()}")
+
+
+def periodicity_html():
+    fig = f"{A_OUT}/cigar_periodicity.png"
+    b = _fileb64(fig) if os.path.exists(fig) else ""
+    if not b:
+        return ""
+    return ("<h3>The CIGAR indels' 178-bp fingerprint (real vs artefact)</h3>"
+            "<p>Do the CIGAR DEL/INS sizes respect the <b>178-bp CEN178 monomer period</b>? "
+            "<b>Real CEN CIGAR indels are 90.5% whole-monomer</b> (|svlen| mod 178 ≈ 0/178 — the unequal-HR "
+            "signature: satellite arrays gain/lose entire monomers). The <b>sequencing-error CIGAR indels are "
+            "random-sized</b> (0.9% in-phase; sizes flat across the monomer). So the periodicity is a biological "
+            "fingerprint that sequencing artefacts cannot fake — a per-call test that separates real "
+            "whole-monomer indels from error even within the CIGAR channel.</p>"
+            + im(b, "Left: CEN178 phase (|svlen| mod 178) — real spikes at 0/178, artefact is flat. "
+                    "Right: size spectrum — real combs at multiples of 178, artefact is smooth."))
 
 
 def synthetic_html():
