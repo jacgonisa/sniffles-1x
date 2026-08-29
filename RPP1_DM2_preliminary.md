@@ -63,6 +63,34 @@ structural instability jumps out.
 | leaf | 19,435,198 | DEL | −59 | CIGAR | 60 | RPP1/AT3G44480 |
 | leaf | 19,452,667 | INS | 508 | CIGAR | 60 | RPP1~ |
 
+## Statistical test — CIGAR DEL/INS rate (the trustworthy channel)
+
+`scripts/rpp1_cigar_test.py`: CIGAR-only DEL/INS (≥50 bp) per read in the cluster vs **60 matched
+310-kb arm windows** tiled across all chromosome arms (pericentromere + telomeres excluded), Col hap.
+Poisson-rate statistics.
+
+**(1) Cluster vs surrounding arm regions — NOT significantly different (not a hotspot):**
+
+| tissue | cluster rate /1k | arm median /1k | expected vs observed | Poisson p | percentile |
+|---|---|---|---|---|---|
+| leaf | 0.78 (6 events / 7725 reads) | 0.52 | 4.4 exp vs 6 obs | **0.56 (ns)** | 73rd |
+| pollen | 0.80 (1 event / 1252 reads) | 1.58 | 1.6 exp vs 1 obs | **1.0 (ns)** | 32nd |
+
+The cluster sits inside the arm distribution in both tissues (leaf slightly above median, pollen
+below) — no evidence of elevated CIGAR-indel instability at the cluster.
+
+**(2) Leaf vs pollen (Poisson rate-ratio test):**
+- **In the cluster: no difference** — leaf 0.78 vs pollen 0.80 /1k, rate ratio 0.97, **p=1.0** (but only
+  6 vs 1 events → underpowered at the cluster alone).
+- **Genome-wide in arms: pollen is ~2.2× higher — highly significant.** leaf 0.57 vs pollen 1.26 /1k
+  (n=247 vs 90 events), rate ratio 0.45, **p=1.5×10⁻⁹**; paired per-window Wilcoxon **p=4.4×10⁻⁶**.
+  (Consistent with the pipeline's arm-control step 16, and robust to read length — pollen reads are
+  *shorter*, so per-bp the enrichment is larger.)
+
+So: the elevated pollen single-molecule indel rate is a **genome-wide arm phenomenon**, not specific to
+RPP1 — and the RPP1 cluster is unremarkable against its own arm background. Figure:
+`docs/rpp1_cigar_test.png`.
+
 ## Caveats / next steps
 - **Col haplotype only.** The **Ler** RPP1 cluster (structurally different, and Ler-HiFi has no liftoff
   annotation yet) needs its own coordinates — map the RPP1 CDS to Ler-HiFi, then rerun. Ler is where
