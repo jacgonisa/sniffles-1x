@@ -58,6 +58,7 @@ def annotate(rows, bamfn):
 def main():
     print(f"TRASH-py in-register check (canonical step-13 method), N={N} per group\n")
     print(f"{'group':12}{'n':>5}{'in_CEN178_array':>17}{'in_register(TRASH)':>20}{'in_phase(size)':>16}")
+    out = []
     for name, path, bamfn in [("real CEN", f"{SM}/results/sm_sv_calls.tsv", real_bam),
                               ("dirty", f"{SM}/results_synthetic_dirty/sm_sv_calls.tsv", dirty_bam)]:
         rows = sample_calls(path, N)
@@ -65,6 +66,11 @@ def main():
         if not n:
             print(f"{name:12}{0:>5}  (no reads matched)"); continue
         print(f"{name:12}{n:>5}{f'{100*inarr/n:.0f}%':>17}{f'{100*inreg/n:.0f}%':>20}{f'{100*insize/n:.0f}%':>16}")
+        out.append((name, n, round(100 * inarr / n), round(100 * inreg / n), round(100 * insize / n)))
+    with open(f"{SM}/results/trash_check.tsv", "w") as f:
+        f.write("group\tn\tin_cen178_array_pct\tin_register_trash_pct\tin_phase_size_pct\n")
+        for r in out:
+            f.write("\t".join(map(str, r)) + "\n")
     print("DONE_TRASH_CHECK")
 
 

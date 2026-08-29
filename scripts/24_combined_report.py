@@ -373,7 +373,27 @@ def periodicity_html():
             "fingerprint that sequencing artefacts cannot fake — a per-call test that separates real "
             "whole-monomer indels from error even within the CIGAR channel.</p>"
             + im(b, "Left: CEN178 phase (|svlen| mod 178) — real spikes at 0/178, artefact is flat. "
-                    "Right: size spectrum — real combs at multiples of 178, artefact is smooth."))
+                    "Right: size spectrum — real combs at multiples of 178, artefact is smooth.")
+            + trash_check_html())
+
+
+def trash_check_html():
+    """Canonical TRASH-py per-read in-register (step-13 method) confirming the size test."""
+    rows = load(f"{A_OUT}/trash_check.tsv")
+    if not rows:
+        return ""
+    tr = "".join(
+        f"<tr><td>{d['group']}</td><td>{d['n']}</td><td>{d['in_cen178_array_pct']}%</td>"
+        f"<td><b>{d['in_register_trash_pct']}%</b></td><td>{d['in_phase_size_pct']}%</td></tr>" for d in rows)
+    return ("<p><b>Validated with the canonical TRASH-py method</b> (not just the size test): TRASH is run on "
+            "each full read, the CEN178 monomers flanking the junction are located, and in-register requires "
+            "both flanks to be real monomers <i>and</i> whole-monomer phase (step 13 method, sampled reads). "
+            "The rigorous per-read call matches the cheap |svlen| mod 178 test, and shows the discriminator is "
+            "the <b>178-bp register</b>, not array membership — both real and artefact indels sit inside CEN178 "
+            "arrays, but only the real ones are phased to the monomer lattice.</p>"
+            "<table><tr><th>group</th><th>n</th><th>in CEN178 array</th>"
+            "<th>in-register (TRASH-py)</th><th>in-phase (size test)</th></tr>"
+            f"{tr}</table>")
 
 
 def synthetic_html():
