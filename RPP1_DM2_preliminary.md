@@ -123,6 +123,11 @@ The CHARLA recombination pipeline crossover calls live in
 **meiotic crossover activity** in pollen — consistent with the accession-level structural mutability of these NLR
 clusters arising from meiotic (unequal) recombination rather than somatic structural mutation.
 
+Overlay of the 7 pollen crossover breakpoints on the gene annotation (`docs/rpp1_crossover_overlay.png`,
+`scripts/rpp1_crossover_overlay.py`): one 4b-2 crossover lands on **AT3G44630**, the array (44630/44670/RPP1)
+sits between an upstream pair (~19.21/19.25 Mb) and a distal cluster (~19.58–19.61 Mb); 0 leaf crossovers in
+the window. (n=7 — a map, not a test.)
+
 ## Caveats / next steps
 - **Col haplotype only.** The **Ler** RPP1 cluster (structurally different, and Ler-HiFi has no liftoff
   annotation yet) needs its own coordinates — map the RPP1 CDS to Ler-HiFi, then rerun. Ler is where
