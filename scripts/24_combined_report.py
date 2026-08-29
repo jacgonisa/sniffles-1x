@@ -340,6 +340,25 @@ def compartment_table():
             "windows (unique sequence); human CEN/ARM = genome-wide insertions classified by the HG002 alpha-CEN / ARM beds.</p>")
 
 
+def detector_source_table():
+    """Which detector produced the calls: CIGAR inline-indel vs the two split-based detectors."""
+    rows = load(f"{A_OUT}/synthetic_detector_source.tsv")
+    if not rows:
+        return ""
+    nm = {"real": "real", "mapping_floor": "clean (mapping floor)", "seq_stress": "dirty (seq stress)"}
+    tr = "".join(
+        f"<tr><td>{nm.get(d['run'], d['run'])}</td><td>{d['CIGAR']}</td>"
+        f"<td>{d['SPLITREAD']}</td><td>{d['SPLITANDMAP']}</td><td>{d['total']}</td></tr>" for d in rows)
+    return ("<h3>Which detector fires — CIGAR inline-indel vs split-based</h3>"
+            "<p>The caller has two families: <b>CIGAR</b> (inline I/D≥50 bp in one linear alignment → DEL/INS) "
+            "and <b>split-based</b> (<b>SPLITREAD</b> = aligner SA split, <b>SPLITANDMAP</b> = our cut+re-map → "
+            "DUP/INV/BND + large DEL/INS). Under sequencing stress the artefacts are <b>~100% CIGAR</b>; the "
+            "split detectors — the sole source of DUP/INV/BND — stay near zero, which is <i>why</i> those types "
+            "are error-immune.</p>"
+            "<table><tr><th>run</th><th>CIGAR</th><th>SPLITREAD</th><th>SPLITANDMAP</th><th>total</th></tr>"
+            f"{tr}</table>")
+
+
 def synthetic_html():
     """Two synthetic controls: (1) mapping floor (clean, de matched to real) = 0; (2) sequencing
     stress-test (dirty) — only INS/DEL are error-generable, DUP/INV/BND never appear."""
@@ -377,6 +396,7 @@ def synthetic_html():
             f"CEN INS flagged), which the caller filters — the simulator only confirms the type pattern, it "
             f"overshoots the magnitude (its glitch model is harsher than real CCS homopolymer/quality-decay).</div>"
             f"{figh}"
+            f"{detector_source_table()}"
             f"<table><tr><th>compartment</th><th>group</th><th>type</th>"
             f"<th>real rate</th><th>mapping floor</th>"
             f"<th>seq-error can<br>generate?</th><th>excess over<br>mapping floor</th></tr>{tr}</table>"

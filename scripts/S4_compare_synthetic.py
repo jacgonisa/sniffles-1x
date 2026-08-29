@@ -75,8 +75,36 @@ def main():
             print(f"{comp:5}{g:16}{t:7}{rr:9.3f}{cs:10.3f}{ds:11.1f}")
     print("... full table -> results/synthetic_comparison.tsv")
 
+    detector_breakdown()
     figure(rc, sc, dc, ra, sa, da)
     print("DONE_SYNTH_COMPARE")
+
+
+def detector_breakdown():
+    """Which detector (CIGAR inline-indel vs split-based) produced the calls, per run. Shows the dirty
+    floor is ~100% CIGAR and the split detectors (source of DUP/INV/BND) are error-immune."""
+    from collections import Counter
+
+    def one(path):
+        c = Counter()
+        if not os.path.exists(path):
+            return c, 0
+        rows = list(csv.DictReader(open(path), delimiter="\t"))
+        for r in rows:
+            m = r["methods"]
+            det = "CIGAR" if "CIGAR" in m else ("SPLITANDMAP" if "SPLITANDMAP" in m else "SPLITREAD")
+            c[det] += 1
+        return c, len(rows)
+
+    runs = [("real", f"{REAL}/sm_sv_calls.tsv"), ("mapping_floor", f"{SYN}/sm_sv_calls.tsv"),
+            ("seq_stress", f"{SYND}/sm_sv_calls.tsv")]
+    with open(f"{REAL}/synthetic_detector_source.tsv", "w") as f:
+        f.write("run\tCIGAR\tSPLITREAD\tSPLITANDMAP\ttotal\n")
+        print(f"\n{'run':14}{'CIGAR':>8}{'SPLITREAD':>11}{'SPLITANDMAP':>13}{'total':>8}")
+        for name, path in runs:
+            c, n = one(path)
+            f.write(f"{name}\t{c['CIGAR']}\t{c['SPLITREAD']}\t{c['SPLITANDMAP']}\t{n}\n")
+            print(f"{name:14}{c['CIGAR']:8}{c['SPLITREAD']:11}{c['SPLITANDMAP']:13}{n:8}")
 
 
 def figure(rc, sc, dc, ra, sa, da):
